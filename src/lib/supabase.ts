@@ -12,6 +12,12 @@ export type UrgenciaTarefa = 'atrasada' | 'hoje' | 'esta_semana' | 'futura'
 export type EstadoBriefing = 'aberto' | 'fechado' | 'recibo_passado' | 'recebido'
 export type TipoFollowup = '7d' | '30d' | '60d' | '120d'
 
+export interface ServicoPT {
+  id: number
+  nome: string
+  horas_semanais: number
+}
+
 export interface Aluno {
   num_socio: string
   contacto: string
@@ -22,6 +28,8 @@ export interface Aluno {
   plano_confirmado_em: string | null
   estado: string | null
   notas: string | null
+  plano_pt: string | null
+  horas_pt_semanais: number | null
   criado_em: string
   atualizado_em: string
 }

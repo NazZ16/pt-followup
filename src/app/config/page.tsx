@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase, NivelRemuneracao, TipoSessaoRow, ConfigFiscal, BonusTrimestral, SsTrimestral, ConfigBonus } from '@/lib/supabase'
+import { supabase, NivelRemuneracao, TipoSessaoRow, ConfigFiscal, BonusTrimestral, SsTrimestral, ConfigBonus, ServicoPT } from '@/lib/supabase'
 
 export default function ConfigPage() {
   const [niveis, setNiveis] = useState<NivelRemuneracao[]>([])
@@ -9,6 +9,7 @@ export default function ConfigPage() {
   const [fiscal, setFiscal] = useState<ConfigFiscal | null>(null)
   const [bonus, setBonus] = useState<BonusTrimestral[]>([])
   const [configBonus, setConfigBonus] = useState<ConfigBonus[]>([])
+  const [servicosPT, setServicosPT] = useState<ServicoPT[]>([])
   const [ss, setSs] = useState<SsTrimestral[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -19,13 +20,14 @@ export default function ConfigPage() {
 
   async function load() {
     setLoading(true)
-    const [{ data: n }, { data: ts }, { data: f }, { data: b }, { data: s }, { data: cb }] = await Promise.all([
+    const [{ data: n }, { data: ts }, { data: f }, { data: b }, { data: s }, { data: cb }, { data: sp }] = await Promise.all([
       supabase.from('niveis_remuneracao').select('*').order('nivel'),
       supabase.from('tipos_sessao').select('*').order('id'),
       supabase.from('config_fiscal').select('*').order('vigente_desde', { ascending: false }).limit(1).single(),
       supabase.from('bonus_trimestral').select('*').order('ano', { ascending: false }),
       supabase.from('ss_trimestral').select('*').order('ano_referencia', { ascending: false }),
       supabase.from('config_bonus').select('*').order('horas_threshold'),
+      supabase.from('servicos_pt').select('*').order('horas_semanais'),
     ])
     setNiveis((n as NivelRemuneracao[]) || [])
     setTiposSessao((ts as TipoSessaoRow[]) || [])
@@ -33,6 +35,7 @@ export default function ConfigPage() {
     setBonus((b as BonusTrimestral[]) || [])
     setSs((s as SsTrimestral[]) || [])
     setConfigBonus((cb as ConfigBonus[]) || [])
+    setServicosPT((sp as ServicoPT[]) || [])
     setLoading(false)
   }
 
@@ -136,6 +139,29 @@ export default function ConfigPage() {
 
   function addConfigBonus() {
     setConfigBonus([...configBonus, { id: 0, horas_threshold: 0, valor_bonus: 0 }])
+  }
+
+  async function salvarServicoPT(sv: ServicoPT) {
+    setSaving(true)
+    let error = null
+    if (sv.id) {
+      ({ error } = await supabase.from('servicos_pt').update({ nome: sv.nome, horas_semanais: sv.horas_semanais }).eq('id', sv.id))
+    } else {
+      ({ error } = await supabase.from('servicos_pt').insert({ nome: sv.nome, horas_semanais: sv.horas_semanais }))
+    }
+    setSaving(false)
+    if (error) fail(error.message); else { ok(); load() }
+  }
+
+  async function eliminarServicoPT(id: number) {
+    setSaving(true)
+    const { error } = await supabase.from('servicos_pt').delete().eq('id', id)
+    setSaving(false)
+    if (error) fail(error.message); else { ok(); load() }
+  }
+
+  function addServicoPT() {
+    setServicosPT([...servicosPT, { id: 0, nome: '', horas_semanais: 0 }])
   }
 
   async function salvarSs(s: SsTrimestral) {
@@ -363,6 +389,68 @@ export default function ConfigPage() {
             </tbody>
           </table>
         </div>
+      </section>
+
+      {/* SERVIÇOS PT */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-base text-gray-800">Serviços PT</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Define os planos disponíveis e as horas semanais correspondentes</p>
+          </div>
+          <button onClick={addServicoPT}
+            className="px-3 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-200 transition-colors">
+            + Serviço
+          </button>
+        </div>
+        {servicosPT.length === 0
+          ? <p className="text-sm text-gray-400 py-2">Nenhum serviço configurado. Clica em "+ Serviço" para adicionar.</p>
+          : (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Nome do serviço</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-40">Horas / semana</th>
+                    <th className="px-4 py-3 w-36"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {servicosPT.map((sv, i) => (
+                    <tr key={sv.id || `new-${i}`}>
+                      <td className="px-4 py-3">
+                        <input value={sv.nome} placeholder="ex: PT 2x semana"
+                          onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], nome: e.target.value }; setServicosPT(c) }}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <input type="number" step="0.5" min="0" value={sv.horas_semanais}
+                            onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], horas_semanais: Number(e.target.value) }; setServicosPT(c) }}
+                            className="w-20 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                          <span className="text-sm text-gray-500">h/sem</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1.5 justify-end">
+                          <button onClick={() => salvarServicoPT(sv)} disabled={saving || !sv.nome}
+                            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                            Guardar
+                          </button>
+                          {sv.id > 0 && (
+                            <button onClick={() => eliminarServicoPT(sv.id)} disabled={saving}
+                              className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors">
+                              Eliminar
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
       </section>
 
       {/* FISCAL */}
