@@ -160,6 +160,8 @@ export default function ConfigPage() {
   }
 
   const TIPOS_BASE = ['rep', 'oi', 'treino_oferta', 'treino_60', 'treino_45']
+  // treino_45 e treino_60 não têm valor fixo — o valor é determinado pelo nível de horas
+  const tiposVisiveis = tiposSessao.filter(t => t.id !== 'treino_45' && t.id !== 'treino_60')
 
   if (loading) return (
     <div className="flex items-center justify-center h-40">
@@ -179,7 +181,7 @@ export default function ConfigPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-semibold text-base text-gray-800">Códigos da folha de vencimento</h2>
-            <p className="text-xs text-gray-500 mt-0.5">{tiposSessao.length} código{tiposSessao.length !== 1 ? 's' : ''} carregado{tiposSessao.length !== 1 ? 's' : ''} · edita e clica Guardar na linha</p>
+            <p className="text-xs text-gray-500 mt-0.5">treino_45 e treino_60 não estão aqui — o valor deles vem da tabela de níveis abaixo</p>
           </div>
           <button onClick={() => setNovoTipo(true)}
             className="px-4 py-2 bg-gray-800 text-white rounded-xl text-sm font-semibold hover:bg-gray-900 transition-colors shadow-sm">
@@ -255,12 +257,13 @@ export default function ConfigPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {tiposSessao.map((t, i) => (
-                <tr key={t.id}>
+              {tiposVisiveis.map((t) => {
+                const i = tiposSessao.findIndex(x => x.id === t.id)
+                return <tr key={t.id}>
                   <td className="px-4 py-2.5">
                     <span className="font-mono text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">{t.id}</span>
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-2.5 min-w-[160px]">
                     <input value={t.nome}
                       onChange={(e) => { const c = [...tiposSessao]; c[i] = { ...c[i], nome: e.target.value }; setTiposSessao(c) }}
                       className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -295,7 +298,7 @@ export default function ConfigPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              })}
             </tbody>
           </table>
         </div>
@@ -303,45 +306,57 @@ export default function ConfigPage() {
 
       {/* NÍVEIS DE REMUNERAÇÃO */}
       <section className="space-y-3">
-        <h2 className="font-semibold text-base text-gray-800">Níveis de remuneração (treinos)</h2>
-        <div className="space-y-2">
-          {niveis.map((n, i) => (
-            <div key={n.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-              <p className="font-semibold text-sm text-gray-900 mb-3">Nível {n.nivel}</p>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div>
-                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Horas mín.</label>
-                  <input type="number" value={n.horas_min}
-                    onChange={(e) => { const c = [...niveis]; c[i] = { ...c[i], horas_min: Number(e.target.value) }; setNiveis(c) }}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Horas máx.</label>
-                  <input type="number" value={n.horas_max ?? ''} placeholder="—"
-                    onChange={(e) => { const c = [...niveis]; c[i] = { ...c[i], horas_max: e.target.value ? Number(e.target.value) : null }; setNiveis(c) }}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">45 min (€)</label>
-                  <input type="number" step="0.01" value={n.valor_45min}
-                    onChange={(e) => { const c = [...niveis]; c[i] = { ...c[i], valor_45min: Number(e.target.value) }; setNiveis(c) }}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">60 min (€)</label>
-                  <input type="number" step="0.01" value={n.valor_60min}
-                    onChange={(e) => { const c = [...niveis]; c[i] = { ...c[i], valor_60min: Number(e.target.value) }; setNiveis(c) }}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-              </div>
-              <button onClick={() => salvarNivel(n)} disabled={saving}
-                className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                Guardar
-              </button>
-            </div>
-          ))}
+        <div>
+          <h2 className="font-semibold text-base text-gray-800">Níveis de remuneração</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Valor de treino_45 e treino_60 é determinado pelo nível em que estás no mês · edita e clica Guardar</p>
         </div>
-        <p className="text-xs text-gray-500">Só sessões de alunos com PT activo contam para o nível.</p>
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50">
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Nível</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Horas mín.</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Horas máx.</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">treino_45 (€)</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">treino_60 (€)</th>
+                <th className="px-4 py-2.5 w-28"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {niveis.map((n, i) => (
+                <tr key={n.id}>
+                  <td className="px-4 py-2.5 font-semibold text-gray-900">Nível {n.nivel}</td>
+                  <td className="px-4 py-2.5">
+                    <input type="number" value={n.horas_min}
+                      onChange={(e) => { const c = [...niveis]; c[i] = { ...c[i], horas_min: Number(e.target.value) }; setNiveis(c) }}
+                      className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <input type="number" value={n.horas_max ?? ''} placeholder="—"
+                      onChange={(e) => { const c = [...niveis]; c[i] = { ...c[i], horas_max: e.target.value ? Number(e.target.value) : null }; setNiveis(c) }}
+                      className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <input type="number" step="0.01" value={n.valor_45min}
+                      onChange={(e) => { const c = [...niveis]; c[i] = { ...c[i], valor_45min: Number(e.target.value) }; setNiveis(c) }}
+                      className="w-24 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <input type="number" step="0.01" value={n.valor_60min}
+                      onChange={(e) => { const c = [...niveis]; c[i] = { ...c[i], valor_60min: Number(e.target.value) }; setNiveis(c) }}
+                      className="w-24 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <button onClick={() => salvarNivel(n)} disabled={saving}
+                      className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                      Guardar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       {/* FISCAL */}
