@@ -34,6 +34,27 @@ export default function ConfigPage() {
 
   function ok() { setMsg('Guardado.'); setTimeout(() => setMsg(''), 3000) }
 
+  async function calcularSsAutomatico() {
+    const hoje = new Date()
+    const trimAtual = Math.ceil((hoje.getMonth() + 1) / 3)
+    // Trimestre anterior
+    const trimRef = trimAtual === 1 ? 4 : trimAtual - 1
+    const anoRef = trimAtual === 1 ? hoje.getFullYear() - 1 : hoje.getFullYear()
+    // Meses do trimestre de referência
+    const mesInicio = (trimRef - 1) * 3 + 1
+    const meses = [`${anoRef}-${String(mesInicio).padStart(2, '0')}`, `${anoRef}-${String(mesInicio + 1).padStart(2, '0')}`, `${anoRef}-${String(mesInicio + 2).padStart(2, '0')}`]
+    const { data: brs } = await supabase.from('briefings').select('total_bruto').in('id', meses)
+    const total = ((brs as { total_bruto: number }[]) || []).reduce((acc, b) => acc + (b.total_bruto ?? 0), 0)
+    const proxTrim = trimAtual === 4 ? 1 : trimAtual + 1
+    const proxAno = trimAtual === 4 ? hoje.getFullYear() + 1 : hoje.getFullYear()
+    setSs([{
+      id: 0, ano_referencia: anoRef, trimestre_referencia: trimRef,
+      rendimento_relevante: total, base_incidencia: total / 3,
+      contribuicao_mensal: Math.round((total / 3) * 0.214 * 100) / 100,
+      ano_aplicacao: proxAno, trimestre_aplicacao: proxTrim,
+    }, ...ss.filter(s => !(s.ano_referencia === anoRef && s.trimestre_referencia === trimRef))])
+  }
+
   async function salvarNiveis() {
     setSaving(true)
     for (const n of niveis) {
@@ -246,10 +267,16 @@ export default function ConfigPage() {
       <section>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-semibold">Segurança Social — registos</h2>
-          <button onClick={addSs}
-            className="text-sm px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
-            + Trimestre
-          </button>
+          <div className="flex gap-2">
+            <button onClick={calcularSsAutomatico}
+              className="text-sm px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors">
+              Calcular do trimestre anterior
+            </button>
+            <button onClick={addSs}
+              className="text-sm px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+              + Manual
+            </button>
+          </div>
         </div>
         {ss.length === 0
           ? <p className="text-sm text-gray-500">Nenhum registo de SS. Adiciona no fim de cada trimestre.</p>
