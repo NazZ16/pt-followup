@@ -12,14 +12,16 @@ const ESTADO_LABEL: Record<EstadoBriefing, string> = {
   aberto: 'Aberto', fechado: 'Fechado', recibo_passado: 'Recibo passado', recebido: 'Recebido',
 }
 const ESTADO_COLOR: Record<EstadoBriefing, string> = {
-  aberto: 'bg-yellow-100 text-yellow-800', fechado: 'bg-blue-100 text-blue-800',
-  recibo_passado: 'bg-purple-100 text-purple-800', recebido: 'bg-green-100 text-green-800',
+  aberto: 'bg-amber-100 text-amber-700',
+  fechado: 'bg-blue-100 text-blue-700',
+  recibo_passado: 'bg-purple-100 text-purple-700',
+  recebido: 'bg-emerald-100 text-emerald-700',
 }
 const ESTADOS_SEGUINTES: Record<EstadoBriefing, EstadoBriefing | null> = {
   aberto: 'fechado', fechado: 'recibo_passado', recibo_passado: 'recebido', recebido: null,
 }
 const ESTADO_ACAO: Partial<Record<EstadoBriefing, string>> = {
-  aberto: 'Fechar', fechado: 'Recibo passado', recibo_passado: 'Recebido',
+  aberto: 'Fechar mês', fechado: 'Recibo passado', recibo_passado: 'Marcar recebido',
 }
 
 interface FormSessao {
@@ -72,7 +74,6 @@ export default function FinanceiroPage() {
   async function avancarEstado(briefing: Briefing) {
     const seguinte = ESTADOS_SEGUINTES[briefing.estado]
     if (!seguinte) return
-    // Ao fechar: recalcula totais a partir das sessões reais
     if (briefing.estado === 'aberto') {
       const sessoesDoMes = sessoes.filter(s => s.mes_briefing === briefing.id && s.estado === 'realizada')
       const bruto = sessoesDoMes.reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0)
@@ -82,7 +83,6 @@ export default function FinanceiroPage() {
       }, 0)
       const irs = bruto * taxaIrs
       const liquido = bruto - irs - ssMensal
-      // Actualiza horas do bónus trimestral
       const trim = Math.ceil(briefing.mes / 3)
       const bonusTrim = bonus.find(b => b.ano === briefing.ano && b.trimestre === trim)
       if (bonusTrim) {
@@ -143,7 +143,6 @@ export default function FinanceiroPage() {
     const d = new Date(formSessao.data_sessao + 'T12:00:00')
     const mesBriefing = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 
-    // Garantir briefing do mês
     const { data: brExistente } = await supabase.from('briefings').select('id').eq('id', mesBriefing).maybeSingle()
     if (!brExistente) {
       await supabase.from('briefings').insert({ id: mesBriefing, ano: d.getFullYear(), mes: d.getMonth() + 1, estado: 'aberto', total_bruto: 0, irs_retido: 0, ss_pagar: ssMensal, liquido: 0, horas_contadas: 0 })
@@ -151,12 +150,10 @@ export default function FinanceiroPage() {
 
     const contaHoras = !!aluno?.convertido && tipo?.conta_para_nivel === true
 
-    // Calcular valor: fixo para avaliações, nível para treinos
     let valorCalculado: number | null = null
     if (tipo?.categoria === 'avaliacao') {
       valorCalculado = tipo.valor_fixo ?? 0
     } else if (tipo?.categoria === 'treino' && aluno?.convertido) {
-      // Horas do mês até agora (para determinar nível)
       const { data: niveis } = await supabase.from('niveis_remuneracao').select('*').order('horas_min')
       const sessoesDoMes = sessoes.filter(s => s.mes_briefing === mesBriefing && s.conta_horas && s.estado === 'realizada')
       const horasMes = sessoesDoMes.reduce((acc, s) => {
@@ -194,114 +191,134 @@ export default function FinanceiroPage() {
 
   const alunoSelecionado = alunos.find(a => a.num_socio === formSessao.num_socio && a.contacto === formSessao.contacto)
 
-  if (loading) return <p className="text-sm text-gray-500">A carregar...</p>
+  if (loading) return (
+    <div className="flex items-center justify-center h-40">
+      <p className="text-gray-400 text-sm">A carregar...</p>
+    </div>
+  )
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="text-xl font-bold">Financeiro</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Financeiro</h1>
         <div className="flex gap-2">
-          <button onClick={() => setNovasSessao(true)} className="text-sm px-3 py-1.5 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors">
+          <button onClick={() => setNovasSessao(true)}
+            className="px-4 py-2 bg-gray-800 text-white rounded-xl text-sm font-semibold hover:bg-gray-900 transition-colors shadow-sm">
             + Sessão
           </button>
-          <button onClick={criarBriefingMesCorrente} className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-            + Briefing do mês
+          <button onClick={criarBriefingMesCorrente}
+            className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm">
+            + Briefing
           </button>
         </div>
       </div>
 
       {/* FORM NOVA SESSÃO */}
       {novasSessao && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-          <h2 className="font-semibold text-sm">Registar sessão manualmente</h2>
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-3">
+          <h2 className="font-semibold">Registar sessão</h2>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Aluno</label>
+            <div className="col-span-2">
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Aluno</label>
               <select value={`${formSessao.num_socio}|${formSessao.contacto}`}
                 onChange={(e) => {
                   const [num_socio, contacto] = e.target.value.split('|')
                   setFormSessao({ ...formSessao, num_socio, contacto })
                 }}
-                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="|">Seleccionar aluno...</option>
                 {alunos.map(a => <option key={`${a.num_socio}-${a.contacto}`} value={`${a.num_socio}|${a.contacto}`}>{a.nome} ({a.num_socio})</option>)}
               </select>
             </div>
             <div>
-              <label className="text-xs text-gray-500 block mb-1">Tipo de sessão</label>
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Tipo de sessão</label>
               <select value={formSessao.tipo_sessao_id}
                 onChange={(e) => setFormSessao({ ...formSessao, tipo_sessao_id: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="">Seleccionar tipo...</option>
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Seleccionar...</option>
                 {tiposSessao.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-xs text-gray-500 block mb-1">Data</label>
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Data</label>
               <input type="date" value={formSessao.data_sessao}
                 onChange={(e) => setFormSessao({ ...formSessao, data_sessao: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             {alunoSelecionado && (
-              <div className="flex items-end pb-1.5">
-                <p className="text-xs text-gray-500">
-                  {alunoSelecionado.convertido ? '✓ PT activo — conta para nível' : '✗ Não PT — não conta para nível'}
-                </p>
-              </div>
+              <p className="col-span-2 text-sm text-gray-500">
+                {alunoSelecionado.convertido ? '✓ PT activo — conta para nível' : '✗ Não PT — não conta para nível'}
+              </p>
             )}
           </div>
           <div className="flex gap-2">
-            <button onClick={registarSessao} disabled={saving} className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">Guardar</button>
-            <button onClick={() => setNovasSessao(false)} className="text-sm px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">Cancelar</button>
+            <button onClick={registarSessao} disabled={saving}
+              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
+              Guardar
+            </button>
+            <button onClick={() => setNovasSessao(false)}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-200 transition-colors">
+              Cancelar
+            </button>
           </div>
         </div>
       )}
 
       {/* BRIEFINGS */}
-      <section>
-        <h2 className="text-base font-semibold mb-3">Briefings mensais</h2>
+      <section className="space-y-3">
+        <h2 className="font-semibold text-base text-gray-800">Briefings mensais</h2>
         {briefings.length === 0
-          ? <p className="text-sm text-gray-500">Nenhum briefing criado ainda.</p>
+          ? <p className="text-sm text-gray-400 py-2">Nenhum briefing criado ainda.</p>
           : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {briefings.map((b) => (
-                <div key={b.id} className="bg-white border border-gray-200 rounded-xl p-4">
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-sm">{b.id}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ESTADO_COLOR[b.estado]}`}>{ESTADO_LABEL[b.estado]}</span>
+                <div key={b.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span className="font-bold text-lg text-gray-900">{b.id}</span>
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${ESTADO_COLOR[b.estado]}`}>{ESTADO_LABEL[b.estado]}</span>
+                      </div>
+                      {ESTADOS_SEGUINTES[b.estado] && (
+                        <button onClick={() => avancarEstado(b)}
+                          className="px-3 py-1.5 bg-gray-800 text-white rounded-lg text-sm font-medium hover:bg-gray-900 transition-colors">
+                          {ESTADO_ACAO[b.estado]}
+                        </button>
+                      )}
                     </div>
-                    {ESTADOS_SEGUINTES[b.estado] && (
-                      <button onClick={() => avancarEstado(b)} className="text-xs px-3 py-1.5 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors">
-                        {ESTADO_ACAO[b.estado]}
-                      </button>
-                    )}
+
+                    <div className="mt-4 grid grid-cols-4 gap-3">
+                      <FinRow label="Bruto" value={fmt(b.total_bruto)} />
+                      <FinRow label={`IRS ${(taxaIrs * 100).toFixed(1)}%`} value={`-${fmt(b.irs_retido)}`} negative />
+                      <FinRow label="SS" value={`-${fmt(b.ss_pagar)}`} negative />
+                      <FinRow label="Líquido" value={fmt(b.liquido)} highlight />
+                    </div>
+
+                    <button onClick={() => setMesSelecionado(mesSelecionado === b.id ? null : b.id)}
+                      className="mt-3 text-sm text-blue-600 font-medium hover:underline">
+                      {mesSelecionado === b.id ? 'Ocultar sessões' : `Ver sessões (${sessoesByMes[b.id]?.length ?? 0})`}
+                    </button>
                   </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 text-sm">
-                    <div><p className="text-xs text-gray-500">Bruto</p><p className="font-medium">{fmt(b.total_bruto)}</p></div>
-                    <div><p className="text-xs text-gray-500">IRS ({(taxaIrs * 100).toFixed(1)}%)</p><p className="font-medium text-red-600">-{fmt(b.irs_retido)}</p></div>
-                    <div><p className="text-xs text-gray-500">SS</p><p className="font-medium text-red-600">-{fmt(b.ss_pagar)}</p></div>
-                    <div><p className="text-xs text-gray-500">Líquido</p><p className="font-semibold text-green-700">{fmt(b.liquido)}</p></div>
-                  </div>
-                  <button onClick={() => setMesSelecionado(mesSelecionado === b.id ? null : b.id)} className="mt-2 text-xs text-blue-600 hover:underline">
-                    {mesSelecionado === b.id ? 'Ocultar' : `Ver sessões (${sessoesByMes[b.id]?.length ?? 0})`}
-                  </button>
+
                   {mesSelecionado === b.id && (
-                    <div className="mt-2 space-y-1">
+                    <div className="border-t border-gray-100 bg-gray-50/50 p-3 space-y-1.5">
                       {(sessoesByMes[b.id] || []).length === 0
-                        ? <p className="text-xs text-gray-500">Sem sessões registadas.</p>
+                        ? <p className="text-sm text-gray-400 py-1">Sem sessões registadas.</p>
                         : (sessoesByMes[b.id] || []).map((s) => {
                           const naoRealizada = s.estado !== 'realizada'
                           return (
-                            <div key={s.id} className={`flex items-center gap-2 text-xs rounded px-2 py-1 ${naoRealizada ? 'bg-red-50 text-gray-400 line-through' : 'bg-gray-50 text-gray-600'}`}>
-                              <span className="flex-1">{s.data_sessao} · {tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id}{s.conta_horas ? ' ⏱' : ''}</span>
-                              <span className="font-medium">{fmt(s.valor_calculado)}</span>
+                            <div key={s.id} className={`flex items-center gap-2 rounded-xl px-3 py-2 ${naoRealizada ? 'bg-red-50 text-gray-400' : 'bg-white border border-gray-100 text-gray-700'}`}>
+                              <span className={`flex-1 text-sm ${naoRealizada ? 'line-through' : ''}`}>
+                                {s.data_sessao} · {tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id}
+                                {s.conta_horas && <span className="ml-1 text-xs text-blue-600 font-medium">⏱</span>}
+                              </span>
+                              <span className="font-semibold text-sm">{fmt(s.valor_calculado)}</span>
                               <button onClick={() => toggleEstadoSessao(s)} title={naoRealizada ? 'Marcar realizada' : 'Marcar não realizada'}
-                                className="text-gray-400 hover:text-yellow-600 transition-colors">
+                                className="text-gray-400 hover:text-amber-600 transition-colors text-lg leading-none">
                                 {naoRealizada ? '↩' : '✕'}
                               </button>
                               <button onClick={() => eliminarSessao(s.id)} title="Eliminar"
-                                className="text-gray-400 hover:text-red-600 transition-colors">
+                                className="text-gray-400 hover:text-red-500 transition-colors">
                                 🗑
                               </button>
                             </div>
@@ -317,17 +334,17 @@ export default function FinanceiroPage() {
       </section>
 
       {/* SS TRIMESTRAL */}
-      <section>
-        <h2 className="text-base font-semibold mb-3">Segurança Social trimestral</h2>
+      <section className="space-y-3">
+        <h2 className="font-semibold text-base text-gray-800">Segurança Social trimestral</h2>
         {ss.length === 0
-          ? <p className="text-sm text-gray-500">Nenhum registo de SS. Configura em <a href="/config" className="text-blue-600 hover:underline">Config</a>.</p>
+          ? <p className="text-sm text-gray-400 py-2">Sem registos. Configura em <a href="/config" className="text-blue-600 hover:underline">Config</a>.</p>
           : (
             <div className="space-y-2">
               {ss.map((s) => (
-                <div key={s.id} className="bg-white border border-gray-200 rounded-xl p-3 grid grid-cols-3 gap-2 text-sm">
-                  <div><p className="text-xs text-gray-500">Referência</p><p className="font-medium">T{s.trimestre_referencia} {s.ano_referencia}</p></div>
-                  <div><p className="text-xs text-gray-500">Base mensal</p><p className="font-medium">{fmt(s.base_incidencia)}</p></div>
-                  <div><p className="text-xs text-gray-500">SS mensal</p><p className="font-semibold text-red-600">{fmt(s.contribuicao_mensal)}</p></div>
+                <div key={s.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 grid grid-cols-3 gap-3">
+                  <FinRow label="Referência" value={`T${s.trimestre_referencia} ${s.ano_referencia}`} />
+                  <FinRow label="Base mensal" value={fmt(s.base_incidencia)} />
+                  <FinRow label="SS mensal" value={fmt(s.contribuicao_mensal)} negative />
                 </div>
               ))}
             </div>
@@ -335,32 +352,45 @@ export default function FinanceiroPage() {
       </section>
 
       {/* BÓNUS TRIMESTRAL */}
-      <section>
-        <h2 className="text-base font-semibold mb-3">Bónus trimestral</h2>
+      <section className="space-y-3">
+        <h2 className="font-semibold text-base text-gray-800">Bónus trimestral</h2>
         {bonus.length === 0
-          ? <p className="text-sm text-gray-500">Nenhum bónus registado. Configura em <a href="/config" className="text-blue-600 hover:underline">Config</a>.</p>
+          ? <p className="text-sm text-gray-400 py-2">Sem registos. Configura em <a href="/config" className="text-blue-600 hover:underline">Config</a>.</p>
           : (
             <div className="space-y-2">
               {bonus.map((b) => (
-                <div key={b.id} className="bg-white border border-gray-200 rounded-xl p-3 flex items-center gap-4 text-sm flex-wrap">
-                  <div><p className="text-xs text-gray-500">Período</p><p className="font-medium">T{b.trimestre} {b.ano}</p></div>
-                  <div><p className="text-xs text-gray-500">Horas</p><p className="font-medium">{b.horas_realizadas} / {b.horas_threshold}</p></div>
-                  <div><p className="text-xs text-gray-500">Bónus</p><p className="font-medium">{fmt(b.valor_bonus)}</p></div>
-                  <div className="ml-auto flex gap-2 items-center">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${b.atingido ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                      {b.atingido ? 'Atingido ✓' : 'Não atingido'}
-                    </span>
-                    {b.atingido && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${b.recebido ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-700'}`}>
-                        {b.recebido ? 'Recebido' : 'Por receber'}
+                <div key={b.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="font-bold text-lg text-gray-900">T{b.trimestre} {b.ano}</span>
+                    <div className="flex gap-2">
+                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${b.atingido ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {b.atingido ? 'Atingido ✓' : 'Não atingido'}
                       </span>
-                    )}
+                      {b.atingido && (
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${b.recebido ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {b.recebido ? 'Recebido' : 'Por receber'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FinRow label="Horas" value={`${b.horas_realizadas} / ${b.horas_threshold}h`} />
+                    <FinRow label="Valor bónus" value={fmt(b.valor_bonus)} highlight={b.atingido} />
                   </div>
                 </div>
               ))}
             </div>
           )}
       </section>
+    </div>
+  )
+}
+
+function FinRow({ label, value, highlight, negative }: { label: string; value: string; highlight?: boolean; negative?: boolean }) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
+      <p className={`font-semibold mt-0.5 ${highlight ? 'text-emerald-600 text-lg' : negative ? 'text-red-500' : 'text-gray-900'}`}>{value}</p>
     </div>
   )
 }
