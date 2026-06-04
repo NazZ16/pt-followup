@@ -34,6 +34,11 @@ export function gerarMensagem(nome: string, tipo: TipoAluno, marco: TipoFollowup
   return MENSAGENS[tipo][marco](nome)
 }
 
+export function gerarMensagemLembrete(nome: string, hora: string | null): string {
+  const horaStr = hora ? ` às ${hora}` : ''
+  return `Olá ${nome}! 👋 Só a lembrar que amanhã${horaStr} tem avaliação comigo. Até amanhã! 💪`
+}
+
 export function gerarLinkWhatsApp(contacto: string, mensagem: string): string {
   const phone = formatPhone(contacto)
   return `https://wa.me/${phone}?text=${encodeURIComponent(mensagem)}`
