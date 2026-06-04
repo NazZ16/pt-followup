@@ -14,7 +14,7 @@ const URGENCIA_COLOR: Record<string, string> = {
 const URGENCIA_LABEL: Record<string, string> = {
   atrasada: 'Atrasada', hoje: 'Hoje', esta_semana: 'Esta semana', futura: 'Futura',
 }
-const MARCO_LABEL: Record<string, string> = { d7: 'D+7', d30: 'D+30', d60: 'D+60', d120: 'D+120' }
+const MARCO_LABEL: Record<string, string> = { '7d': 'D+7', '30d': 'D+30', '60d': 'D+60', '120d': 'D+120' }
 
 function fmt(v: number | null) {
   if (v == null) return '—'
@@ -50,14 +50,15 @@ export default function BriefingPage() {
 
   async function marcarFeita(tarefa: TarefaHoje) {
     if (appsScriptConfigurado()) {
-      // Apps Script apaga o evento do Calendar + actualiza Supabase
       await marcarTarefaViaScript({
         tarefa_id: tarefa.id,
         estado: 'realizado',
         calendar_event_id: tarefa.calendar_event_id ?? null,
       })
     } else {
-      await supabase.from('tarefas_followup').update({ estado: 'realizado', feito_em: new Date().toISOString() }).eq('id', tarefa.id)
+      await supabase.from('tarefas_followup')
+        .update({ estado: 'realizado', feito_em: new Date().toISOString() })
+        .eq('id', tarefa.id)
     }
     loadAll()
   }
@@ -65,7 +66,9 @@ export default function BriefingPage() {
   async function adiar(tarefa: TarefaHoje) {
     const nova = new Date(tarefa.data_prevista)
     nova.setDate(nova.getDate() + 7)
-    await supabase.from('tarefas_followup').update({ estado: 'adiado', data_prevista: nova.toISOString().slice(0, 10) }).eq('id', tarefa.id)
+    await supabase.from('tarefas_followup')
+      .update({ estado: 'adiado', data_prevista: nova.toISOString().slice(0, 10) })
+      .eq('id', tarefa.id)
     loadAll()
   }
 
@@ -133,7 +136,11 @@ export default function BriefingPage() {
   )
 }
 
-function TarefaCard({ tarefa, onFeita, onAdiar }: { tarefa: TarefaHoje; onFeita: (t: TarefaHoje) => void; onAdiar: (t: TarefaHoje) => void }) {
+function TarefaCard({ tarefa, onFeita, onAdiar }: {
+  tarefa: TarefaHoje
+  onFeita: (t: TarefaHoje) => void
+  onAdiar: (t: TarefaHoje) => void
+}) {
   const mensagem = gerarMensagem(tarefa.nome, tarefa.aluno_tipo, tarefa.tipo)
   const link = gerarLinkWhatsApp(tarefa.contacto, mensagem)
 

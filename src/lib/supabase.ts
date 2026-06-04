@@ -10,6 +10,7 @@ export type TipoSessao = 'rep' | 'oi' | 'treino_oferta' | 'treino_60' | 'treino_
 export type EstadoTarefa = 'pendente' | 'realizado' | 'nao_realizado' | 'adiado'
 export type UrgenciaTarefa = 'atrasada' | 'hoje' | 'esta_semana' | 'futura'
 export type EstadoBriefing = 'aberto' | 'fechado' | 'recibo_passado' | 'recebido'
+export type TipoFollowup = '7d' | '30d' | '60d' | '120d'
 
 export interface Aluno {
   num_socio: string
@@ -29,7 +30,7 @@ export interface TarefaFollowup {
   id: string
   num_socio: string
   contacto: string
-  tipo: 'd7' | 'd30' | 'd60' | 'd120'
+  tipo: TipoFollowup
   data_prevista: string
   estado: EstadoTarefa
   mensagem: string | null
@@ -39,7 +40,7 @@ export interface TarefaFollowup {
 
 export interface TarefaHoje {
   id: string
-  tipo: 'd7' | 'd30' | 'd60' | 'd120'
+  tipo: TipoFollowup
   data_prevista: string
   estado: EstadoTarefa
   mensagem: string | null
@@ -58,51 +59,76 @@ export interface NivelRemuneracao {
   horas_max: number | null
   valor_45min: number
   valor_60min: number
+  vigente_desde: string
+}
+
+export interface TipoSessaoRow {
+  id: string
+  nome: string
+  categoria: 'avaliacao' | 'treino'
+  duracao_min: number | null
+  valor_fixo: number | null
+  conta_para_nivel: boolean
 }
 
 export interface Sessao {
   id: string
-  aluno_num_socio: string
-  aluno_contacto: string
-  aluno_nome: string
-  tipo_sessao: TipoSessao
+  num_socio: string
+  contacto: string
+  tipo_sessao_id: string
   data_sessao: string
-  valor_calculado: number
+  estado: string
+  mes_briefing: string | null
+  incluida_briefing: boolean
+  valor_calculado: number | null
   conta_horas: boolean
-  mes: string
+  notas: string | null
+  criado_em: string
 }
 
 export interface Briefing {
   id: string
-  mes: string
-  estado: EstadoBriefing
-  bruto: number
-  irs: number
-  ss: number
-  bonus: number
+  ano: number
+  mes: number
+  nivel_aplicado: number | null
+  horas_contadas: number
+  total_bruto: number
+  irs_retido: number
+  ss_pagar: number
   liquido: number
+  estado: EstadoBriefing
+  data_fecho: string | null
+  data_recibo: string | null
+  data_recebimento_real: string | null
 }
 
 export interface ConfigFiscal {
   id: number
   taxa_irs: number
+  vigente_desde: string
 }
 
 export interface SsTrimestral {
-  id: string
-  trimestre: string
+  id: number
+  ano_referencia: number
+  trimestre_referencia: number
   rendimento_relevante: number
-  base_mensal: number
-  ss_mensal: number
+  base_incidencia: number
+  contribuicao_mensal: number
+  ano_aplicacao: number
+  trimestre_aplicacao: number
 }
 
 export interface BonusTrimestral {
-  id: string
-  trimestre: string
-  threshold_horas: number
+  id: number
+  ano: number
+  trimestre: number
+  horas_threshold: number
   valor_bonus: number
   horas_realizadas: number
   atingido: boolean
+  recebido: boolean
+  data_recebimento: string | null
 }
 
 export interface MesCorrente {

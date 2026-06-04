@@ -155,14 +155,19 @@ function upsertAluno(parsed) {
 // REGISTAR SESSÃO
 // ============================================================
 function registarSessao(parsed, eventoId) {
+  const hoje = new Date();
+  const dataHoje = hoje.toISOString().split('T')[0];
   const existente = supabaseFetch(
-    '/rest/v1/sessoes?calendar_event_id=eq.' + encodeURIComponent(eventoId) + '&select=id',
+    '/rest/v1/sessoes?num_socio=eq.' + encodeURIComponent(parsed.numSocio) +
+    '&contacto=eq.' + encodeURIComponent(parsed.contacto) +
+    '&data_sessao=eq.' + dataHoje +
+    '&tipo_sessao_id=eq.' + parsed.tipo +
+    '&select=id',
     'GET'
   );
 
   if (existente && existente.length > 0) return;
 
-  const hoje = new Date();
   const mesBriefing = hoje.getFullYear() + '-' + String(hoje.getMonth() + 1).padStart(2, '0');
 
   garantirBriefing(mesBriefing, hoje.getFullYear(), hoje.getMonth() + 1);
@@ -176,7 +181,6 @@ function registarSessao(parsed, eventoId) {
     mes_briefing:      mesBriefing,
     incluida_briefing: false,
     conta_horas:       false,
-    calendar_event_id: eventoId,
   };
 
   const resp = supabaseFetch('/rest/v1/sessoes', 'POST', payload, {
