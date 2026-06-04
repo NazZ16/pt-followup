@@ -245,45 +245,45 @@ export default function ConfigPage() {
         )}
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
-          <table className="w-full text-sm min-w-[600px]">
+          <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Código</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Nome</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-20">Dur. (min)</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-28">Valor fixo (€)</th>
-                <th className="text-center px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Conta horas</th>
-                <th className="px-4 py-2.5 w-40"></th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-32">Código</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Nome</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Dur. (min)</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-32">Valor fixo (€)</th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-28">Conta horas</th>
+                <th className="px-4 py-3 w-36"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {tiposVisiveis.map((t) => {
                 const i = tiposSessao.findIndex(x => x.id === t.id)
                 return <tr key={t.id}>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-3">
                     <span className="font-mono text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">{t.id}</span>
                   </td>
-                  <td className="px-4 py-2.5 min-w-[160px]">
+                  <td className="px-4 py-3 min-w-[180px]">
                     <input value={t.nome}
                       onChange={(e) => { const c = [...tiposSessao]; c[i] = { ...c[i], nome: e.target.value }; setTiposSessao(c) }}
                       className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-3">
                     <input type="number" value={t.duracao_min ?? ''}
                       onChange={(e) => { const c = [...tiposSessao]; c[i] = { ...c[i], duracao_min: e.target.value ? Number(e.target.value) : null }; setTiposSessao(c) }}
                       className="w-16 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-3">
                     <input type="number" step="0.01" value={t.valor_fixo ?? ''} placeholder="—"
                       onChange={(e) => { const c = [...tiposSessao]; c[i] = { ...c[i], valor_fixo: e.target.value ? Number(e.target.value) : null }; setTiposSessao(c) }}
                       className="w-24 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </td>
-                  <td className="px-4 py-2.5 text-center">
+                  <td className="px-4 py-3 text-center">
                     <input type="checkbox" checked={t.conta_para_nivel}
                       onChange={(e) => { const c = [...tiposSessao]; c[i] = { ...c[i], conta_para_nivel: e.target.checked }; setTiposSessao(c) }}
                       className="w-4 h-4 rounded" />
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-3">
                     <div className="flex gap-1.5 justify-end">
                       <button onClick={() => salvarTipo(t)} disabled={saving}
                         className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
@@ -314,41 +314,41 @@ export default function ConfigPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Nível</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Horas mín.</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Horas máx.</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">treino_45 (€)</th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">treino_60 (€)</th>
-                <th className="px-4 py-2.5 w-28"></th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Nível</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Horas mín.</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Horas máx.</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Treino 45 min (€)</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Treino 60 min (€)</th>
+                <th className="px-4 py-3 w-28"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {niveis.map((n, i) => (
                 <tr key={n.id}>
-                  <td className="px-4 py-2.5 font-semibold text-gray-900">Nível {n.nivel}</td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-3 font-semibold text-gray-900">Nível {n.nivel}</td>
+                  <td className="px-4 py-3">
                     <input type="number" value={n.horas_min}
                       onChange={(e) => { const c = [...niveis]; c[i] = { ...c[i], horas_min: Number(e.target.value) }; setNiveis(c) }}
-                      className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-3">
                     <input type="number" value={n.horas_max ?? ''} placeholder="—"
                       onChange={(e) => { const c = [...niveis]; c[i] = { ...c[i], horas_max: e.target.value ? Number(e.target.value) : null }; setNiveis(c) }}
-                      className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-3">
                     <input type="number" step="0.01" value={n.valor_45min}
                       onChange={(e) => { const c = [...niveis]; c[i] = { ...c[i], valor_45min: Number(e.target.value) }; setNiveis(c) }}
-                      className="w-24 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-3">
                     <input type="number" step="0.01" value={n.valor_60min}
                       onChange={(e) => { const c = [...niveis]; c[i] = { ...c[i], valor_60min: Number(e.target.value) }; setNiveis(c) }}
-                      className="w-24 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-3">
                     <button onClick={() => salvarNivel(n)} disabled={saving}
-                      className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
                       Guardar
                     </button>
                   </td>
