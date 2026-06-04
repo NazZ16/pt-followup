@@ -15,7 +15,10 @@ export type TipoFollowup = '7d' | '30d' | '60d' | '120d'
 export interface ServicoPT {
   id: number
   nome: string
-  horas_semanais: number
+  tipo: 'semanal' | 'pack'
+  sessoes_semana: number | null
+  duracao_min: number | null
+  horas_mensais: number
 }
 
 export interface Aluno {
@@ -29,7 +32,8 @@ export interface Aluno {
   estado: string | null
   notas: string | null
   plano_pt: string | null
-  horas_pt_semanais: number | null
+  horas_pt_mensais: number | null
+  meses_pagos_pt: number | null
   criado_em: string
   atualizado_em: string
 }

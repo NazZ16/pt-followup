@@ -42,7 +42,7 @@ export default function AlunosPage() {
   const [saving, setSaving] = useState(false)
   const [servicosPT, setServicosPT] = useState<ServicoPT[]>([])
   const [marcandoPT, setMarcandoPT] = useState<string | null>(null)
-  const [formPT, setFormPT] = useState({ plano_pt: '', horas_pt_semanais: '' })
+  const [formPT, setFormPT] = useState({ plano_pt: '', horas_pt_mensais: '', meses_pagos_pt: '1' })
 
   useEffect(() => { load() }, [])
 
@@ -92,15 +92,16 @@ export default function AlunosPage() {
     await supabase.from('alunos').update({
       convertido: true,
       plano_pt: formPT.plano_pt || null,
-      horas_pt_semanais: formPT.horas_pt_semanais ? Number(formPT.horas_pt_semanais) : null,
+      horas_pt_mensais: formPT.horas_pt_mensais ? Number(formPT.horas_pt_mensais) : null,
+      meses_pagos_pt: formPT.meses_pagos_pt ? Number(formPT.meses_pagos_pt) : 1,
     }).eq('num_socio', aluno.num_socio).eq('contacto', aluno.contacto)
     setMarcandoPT(null)
-    setFormPT({ plano_pt: '', horas_pt_semanais: '' })
+    setFormPT({ plano_pt: '', horas_pt_mensais: '', meses_pagos_pt: '1' })
     load()
   }
 
   async function desmarcarPT(aluno: Aluno) {
-    await supabase.from('alunos').update({ convertido: false, plano_pt: null, horas_pt_semanais: null }).eq('num_socio', aluno.num_socio).eq('contacto', aluno.contacto)
+    await supabase.from('alunos').update({ convertido: false, plano_pt: null, horas_pt_mensais: null, meses_pagos_pt: null }).eq('num_socio', aluno.num_socio).eq('contacto', aluno.contacto)
     load()
   }
 
@@ -226,7 +227,7 @@ export default function AlunosPage() {
                   </div>
                   <p className="text-xs text-gray-400">
                     {aluno.contacto} · Nº {aluno.num_socio}{aluno.ultima_avaliacao && ` · ${aluno.ultima_avaliacao}`}
-                    {aluno.plano_pt && ` · ${aluno.plano_pt}`}{aluno.horas_pt_semanais && ` · ${aluno.horas_pt_semanais}h/sem`}
+                    {aluno.plano_pt && ` · ${aluno.plano_pt}`}{aluno.horas_pt_mensais != null && ` · ${aluno.horas_pt_mensais}h/mês`}
                   </p>
                 </div>
                 <span className="text-gray-300 text-xs shrink-0">{aberto ? '▲' : '▼'}</span>
@@ -245,7 +246,7 @@ export default function AlunosPage() {
                         ★ PT activo
                       </button>
                     ) : (
-                      <button onClick={() => { setMarcandoPT(key); setFormPT({ plano_pt: '', horas_pt_semanais: '' }) }}
+                      <button onClick={() => { setMarcandoPT(key); setFormPT({ plano_pt: '', horas_pt_mensais: '', meses_pagos_pt: '1' }) }}
                         className="px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300">
                         ☆ Marcar PT
                       </button>
@@ -262,35 +263,54 @@ export default function AlunosPage() {
                   {marcandoPT === key && (
                     <div className="bg-white rounded-lg border border-emerald-200 p-2.5 space-y-2">
                       <p className="text-xs font-semibold text-gray-700">Serviço fechado</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="col-span-2">
-                          <select
-                            value={formPT.plano_pt}
-                            onChange={e => {
-                              const sv = servicosPT.find(s => s.nome === e.target.value)
-                              setFormPT({ plano_pt: e.target.value, horas_pt_semanais: sv ? String(sv.horas_semanais) : formPT.horas_pt_semanais })
-                            }}
-                            className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="">Selecionar serviço...</option>
-                            {servicosPT.map(sv => (
-                              <option key={sv.id} value={sv.nome}>{sv.nome} ({sv.horas_semanais}h/sem)</option>
-                            ))}
-                            <option value="__outro__">Outro (manual)</option>
-                          </select>
-                        </div>
-                        {(formPT.plano_pt === '__outro__' || (formPT.plano_pt && !servicosPT.find(s => s.nome === formPT.plano_pt))) && (
-                          <input value={formPT.plano_pt === '__outro__' ? '' : formPT.plano_pt}
-                            placeholder="Nome do serviço"
+                      <div className="space-y-2">
+                        <select
+                          value={formPT.plano_pt}
+                          onChange={e => {
+                            const sv = servicosPT.find(s => s.nome === e.target.value)
+                            const hm = sv
+                              ? sv.tipo === 'semanal'
+                                ? String(Math.round((sv.sessoes_semana ?? 1) * ((sv.duracao_min ?? 60) / 60) * 4.33 * 100) / 100)
+                                : String(sv.horas_mensais)
+                              : formPT.horas_pt_mensais
+                            setFormPT({ ...formPT, plano_pt: e.target.value, horas_pt_mensais: hm })
+                          }}
+                          className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                          <option value="">Selecionar serviço...</option>
+                          {servicosPT.map(sv => {
+                            const hm = sv.tipo === 'semanal'
+                              ? Math.round((sv.sessoes_semana ?? 1) * ((sv.duracao_min ?? 60) / 60) * 4.33 * 100) / 100
+                              : sv.horas_mensais
+                            return <option key={sv.id} value={sv.nome}>{sv.nome} ({hm}h/mês)</option>
+                          })}
+                          <option value="__outro__">Outro (manual)</option>
+                        </select>
+                        {formPT.plano_pt === '__outro__' && (
+                          <input placeholder="Nome do serviço"
                             onChange={e => setFormPT({ ...formPT, plano_pt: e.target.value })}
-                            className="col-span-2 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         )}
-                        <div className="flex items-center gap-2">
-                          <input type="number" step="0.5" min="0" value={formPT.horas_pt_semanais}
-                            onChange={e => setFormPT({ ...formPT, horas_pt_semanais: e.target.value })}
-                            placeholder="0"
-                            className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                          <span className="text-xs text-gray-500">horas/semana</span>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-xs text-gray-500 block mb-1">Horas / mês</label>
+                            <input type="number" step="0.01" min="0" value={formPT.horas_pt_mensais}
+                              onChange={e => setFormPT({ ...formPT, horas_pt_mensais: e.target.value })}
+                              placeholder="0"
+                              className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500 block mb-1">Meses pagos</label>
+                            <input type="number" min="1" value={formPT.meses_pagos_pt}
+                              onChange={e => setFormPT({ ...formPT, meses_pagos_pt: e.target.value })}
+                              className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                          </div>
                         </div>
+                        {formPT.horas_pt_mensais && Number(formPT.meses_pagos_pt) > 0 && (
+                          <p className="text-xs font-semibold text-emerald-700">
+                            Total: {Math.round(Number(formPT.horas_pt_mensais) * Number(formPT.meses_pagos_pt) * 100) / 100}h
+                            {Number(formPT.meses_pagos_pt) > 1 ? ` (${formPT.meses_pagos_pt} meses × ${formPT.horas_pt_mensais}h)` : ''}
+                          </p>
+                        )}
                       </div>
                       <div className="flex gap-2">
                         <button onClick={() => confirmarPT(aluno)}
@@ -306,11 +326,18 @@ export default function AlunosPage() {
                   )}
 
                   {/* Plano PT activo */}
-                  {aluno.convertido && (aluno.plano_pt || aluno.horas_pt_semanais) && (
-                    <div className="bg-emerald-50 rounded-lg px-2.5 py-2 flex items-center gap-3">
+                  {aluno.convertido && (aluno.plano_pt || aluno.horas_pt_mensais) && (
+                    <div className="bg-emerald-50 rounded-lg px-2.5 py-2 flex items-center gap-3 flex-wrap">
                       <span className="text-xs font-semibold text-emerald-700">Plano PT</span>
                       {aluno.plano_pt && <span className="text-xs text-emerald-800">{aluno.plano_pt}</span>}
-                      {aluno.horas_pt_semanais && <span className="text-xs text-emerald-700 ml-auto">{aluno.horas_pt_semanais}h/sem</span>}
+                      {aluno.horas_pt_mensais != null && (
+                        <span className="text-xs text-emerald-700 ml-auto">
+                          {aluno.horas_pt_mensais}h/mês
+                          {aluno.meses_pagos_pt && aluno.meses_pagos_pt > 1
+                            ? ` · ${aluno.meses_pagos_pt} meses · Total ${Math.round(aluno.horas_pt_mensais * aluno.meses_pagos_pt * 100) / 100}h`
+                            : ''}
+                        </span>
+                      )}
                     </div>
                   )}
 
