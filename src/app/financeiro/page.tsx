@@ -20,8 +20,14 @@ const ESTADO_COLOR: Record<EstadoBriefing, string> = {
 const ESTADOS_SEGUINTES: Record<EstadoBriefing, EstadoBriefing | null> = {
   aberto: 'fechado', fechado: 'recibo_passado', recibo_passado: 'recebido', recebido: null,
 }
+const ESTADOS_ANTERIORES: Partial<Record<EstadoBriefing, EstadoBriefing>> = {
+  fechado: 'aberto', recibo_passado: 'fechado', recebido: 'recibo_passado',
+}
 const ESTADO_ACAO: Partial<Record<EstadoBriefing, string>> = {
   aberto: 'Fechar mês', fechado: 'Recibo passado', recibo_passado: 'Marcar recebido',
+}
+const ESTADO_ACAO_VOLTAR: Partial<Record<EstadoBriefing, string>> = {
+  fechado: 'Reabrir', recibo_passado: 'Voltar a fechado', recebido: 'Voltar a recibo passado',
 }
 
 interface FormSessao {
@@ -69,6 +75,13 @@ export default function FinanceiroPage() {
     if (cf) setTaxaIrs((cf as { taxa_irs: number }).taxa_irs)
     if (ssAtual) setSsMensal((ssAtual as SsTrimestral).contribuicao_mensal)
     setLoading(false)
+  }
+
+  async function recuarEstado(briefing: Briefing) {
+    const anterior = ESTADOS_ANTERIORES[briefing.estado]
+    if (!anterior) return
+    await supabase.from('briefings').update({ estado: anterior }).eq('id', briefing.id)
+    load()
   }
 
   async function avancarEstado(briefing: Briefing) {
@@ -279,12 +292,20 @@ export default function FinanceiroPage() {
                         <span className="font-bold text-lg text-gray-900">{b.id}</span>
                         <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${ESTADO_COLOR[b.estado]}`}>{ESTADO_LABEL[b.estado]}</span>
                       </div>
-                      {ESTADOS_SEGUINTES[b.estado] && (
-                        <button onClick={() => avancarEstado(b)}
-                          className="px-3 py-1.5 bg-gray-800 text-white rounded-lg text-sm font-medium hover:bg-gray-900 transition-colors">
-                          {ESTADO_ACAO[b.estado]}
-                        </button>
-                      )}
+                      <div className="flex gap-2">
+                        {ESTADOS_ANTERIORES[b.estado] && (
+                          <button onClick={() => recuarEstado(b)}
+                            className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">
+                            ↩ {ESTADO_ACAO_VOLTAR[b.estado]}
+                          </button>
+                        )}
+                        {ESTADOS_SEGUINTES[b.estado] && (
+                          <button onClick={() => avancarEstado(b)}
+                            className="px-3 py-1.5 bg-gray-800 text-white rounded-lg text-sm font-medium hover:bg-gray-900 transition-colors">
+                            {ESTADO_ACAO[b.estado]}
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <div className="mt-4 grid grid-cols-4 gap-3">
