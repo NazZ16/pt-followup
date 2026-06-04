@@ -62,12 +62,14 @@ function syncCalendarToSupabase() {
     if (!parsed) return;
 
     // Upsert do aluno no Supabase
-    const dataEvento = evento.getStartTime().toISOString().split('T')[0];
+    const startTime   = evento.getStartTime();
+    const dataEvento  = startTime.toISOString().split('T')[0];
+    const horaInicio  = startTime.toTimeString().slice(0, 5); // "HH:MM"
     const aluno = upsertAluno(parsed, dataEvento);
     if (!aluno) return;
 
     // Registar a sessão
-    registarSessao(parsed, dataEvento);
+    registarSessao(parsed, dataEvento, horaInicio);
   });
 
   Logger.log('Sync concluído: ' + new Date().toISOString());
@@ -155,7 +157,7 @@ function upsertAluno(parsed, dataEvento) {
 // ============================================================
 // REGISTAR SESSÃO
 // ============================================================
-function registarSessao(parsed, dataEvento) {
+function registarSessao(parsed, dataEvento, horaInicio) {
   const existente = supabaseFetch(
     '/rest/v1/sessoes?num_socio=eq.' + encodeURIComponent(parsed.numSocio) +
     '&contacto=eq.' + encodeURIComponent(parsed.contacto) +
@@ -177,6 +179,7 @@ function registarSessao(parsed, dataEvento) {
     contacto:          parsed.contacto,
     tipo_sessao_id:    parsed.tipo,
     data_sessao:       dataEvento,
+    hora_inicio:       horaInicio || null,
     estado:            'realizada',
     mes_briefing:      mesBriefing,
     incluida_briefing: false,

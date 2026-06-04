@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase, TarefaHoje, MesCorrente, Aluno, Sessao, TipoSessaoRow } from '@/lib/supabase'
-import { gerarMensagem, gerarLinkWhatsApp } from '@/lib/whatsapp'
+import { gerarMensagem, gerarMensagemLembrete, gerarLinkWhatsApp } from '@/lib/whatsapp'
 import { marcarTarefaViaScript, appsScriptConfigurado } from '@/lib/appsscript'
 
 const URGENCIA_COLOR: Record<string, string> = {
@@ -25,6 +25,7 @@ export default function BriefingPage() {
   const [semPlano, setSemPlano] = useState<Aluno[]>([])
   const [briefingAberto, setBriefingAberto] = useState(false)
   const [sessoesHoje, setSessoesHoje] = useState<(Sessao & { nome?: string })[]>([])
+  const [avaliacoesAmanha, setAvaliacoesAmanha] = useState<(Sessao & { nome?: string })[]>([])
   const [tiposSessao, setTiposSessao] = useState<TipoSessaoRow[]>([])
   const [stats, setStats] = useState({ totalAlunos: 0, convertidos: 0, semPlanoTotal: 0 })
   const [loading, setLoading] = useState(true)
@@ -34,13 +35,15 @@ export default function BriefingPage() {
   async function loadAll() {
     setLoading(true)
     const hoje = new Date().toISOString().slice(0, 10)
+    const amanha = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
     const cutoff = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10)
-    const [{ data: t }, { data: m }, { data: a }, { data: b }, { data: sh }, { data: ts }, { data: allAlunos }] = await Promise.all([
+    const [{ data: t }, { data: m }, { data: a }, { data: b }, { data: sh }, { data: sa }, { data: ts }, { data: allAlunos }] = await Promise.all([
       supabase.from('v_tarefas_hoje').select('*').order('data_prevista'),
       supabase.from('v_mes_corrente').select('*').maybeSingle(),
       supabase.from('alunos').select('*').is('plano_confirmado_em', null).lt('ultima_avaliacao', cutoff).eq('estado', 'ativo'),
       supabase.from('briefings').select('*').eq('estado', 'aberto'),
       supabase.from('sessoes').select('*, alunos(nome)').eq('data_sessao', hoje).eq('estado', 'realizada'),
+      supabase.from('sessoes').select('*, alunos(nome)').eq('data_sessao', amanha),
       supabase.from('tipos_sessao').select('*'),
       supabase.from('alunos').select('convertido, plano_confirmado_em, estado'),
     ])
@@ -49,7 +52,14 @@ export default function BriefingPage() {
     setSemPlano((a as Aluno[]) || [])
     setBriefingAberto(!!b?.length && new Date().getDate() > 5)
     setSessoesHoje(((sh as (Sessao & { alunos?: { nome: string } })[]) || []).map(s => ({ ...s, nome: s.alunos?.nome })))
-    setTiposSessao((ts as TipoSessaoRow[]) || [])
+    const tsData = (ts as TipoSessaoRow[]) || []
+    setTiposSessao(tsData)
+    const avalIds = new Set(tsData.filter(x => x.categoria === 'avaliacao').map(x => x.id))
+    setAvaliacoesAmanha(
+      ((sa as (Sessao & { alunos?: { nome: string } })[]) || [])
+        .filter(s => avalIds.has(s.tipo_sessao_id))
+        .map(s => ({ ...s, nome: s.alunos?.nome }))
+    )
     const aa = (allAlunos as { convertido: boolean; plano_confirmado_em: string | null; estado: string }[]) || []
     setStats({
       totalAlunos: aa.filter(x => x.estado === 'ativo').length,
@@ -107,6 +117,33 @@ export default function BriefingPage() {
             {atrasadas.length > 0 && <Alert color="red"><strong>{atrasadas.length} follow-up{atrasadas.length > 1 ? 's' : ''} em atraso</strong></Alert>}
             {semPlano.map(a => <Alert key={`${a.num_socio}-${a.contacto}`} color="amber"><strong>{a.nome}</strong> sem plano há +14 dias</Alert>)}
             {briefingAberto && <Alert color="amber">Briefing do mês por fechar (passou o dia 5)</Alert>}
+          </div>
+        </section>
+      )}
+
+      {/* AVALIAÇÕES AMANHÃ */}
+      {avaliacoesAmanha.length > 0 && (
+        <section>
+          <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1.5">📋 Avaliações amanhã</p>
+          <div className="space-y-1.5">
+            {avaliacoesAmanha.map(s => {
+              const hora = s.hora_inicio ? s.hora_inicio.slice(0, 5) : null
+              const nome = s.nome ?? `Nº ${s.num_socio}`
+              const link = gerarLinkWhatsApp(s.contacto, gerarMensagemLembrete(nome, hora))
+              return (
+                <div key={s.id} className="bg-white rounded-xl shadow-sm border border-blue-100 p-3">
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <span className="font-semibold text-sm text-gray-900">{nome}</span>
+                    {hora && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">{hora}</span>}
+                    <span className="text-xs text-gray-400 ml-auto">{tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id}</span>
+                  </div>
+                  <a href={link} target="_blank" rel="noopener noreferrer"
+                    className="block w-full text-center text-sm px-3 py-1.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors">
+                    Enviar lembrete WhatsApp
+                  </a>
+                </div>
+              )
+            })}
           </div>
         </section>
       )}

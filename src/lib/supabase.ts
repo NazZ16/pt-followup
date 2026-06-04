@@ -82,6 +82,7 @@ export interface Sessao {
   incluida_briefing: boolean
   valor_calculado: number | null
   conta_horas: boolean
+  hora_inicio: string | null
   notas: string | null
   criado_em: string
 }
