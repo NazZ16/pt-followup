@@ -62,11 +62,12 @@ function syncCalendarToSupabase() {
     if (!parsed) return;
 
     // Upsert do aluno no Supabase
-    const aluno = upsertAluno(parsed);
+    const dataEvento = evento.getStartTime().toISOString().split('T')[0];
+    const aluno = upsertAluno(parsed, dataEvento);
     if (!aluno) return;
 
-    // Registar a sessão (se ainda não foi registada — usa event ID como idempotência)
-    registarSessao(parsed, evento.getId());
+    // Registar a sessão
+    registarSessao(parsed, dataEvento);
   });
 
   Logger.log('Sync concluído: ' + new Date().toISOString());
@@ -126,13 +127,13 @@ function extrairContacto(descricao) {
 // ============================================================
 // UPSERT ALUNO
 // ============================================================
-function upsertAluno(parsed) {
+function upsertAluno(parsed, dataEvento) {
   const payload = {
     num_socio:        parsed.numSocio,
     contacto:         parsed.contacto,
     nome:             parsed.nome,
     tipo:             parsed.tipo,
-    ultima_avaliacao: new Date().toISOString().split('T')[0],
+    ultima_avaliacao: dataEvento,
     atualizado_em:    new Date().toISOString(),
   };
 
@@ -154,13 +155,11 @@ function upsertAluno(parsed) {
 // ============================================================
 // REGISTAR SESSÃO
 // ============================================================
-function registarSessao(parsed, eventoId) {
-  const hoje = new Date();
-  const dataHoje = hoje.toISOString().split('T')[0];
+function registarSessao(parsed, dataEvento) {
   const existente = supabaseFetch(
     '/rest/v1/sessoes?num_socio=eq.' + encodeURIComponent(parsed.numSocio) +
     '&contacto=eq.' + encodeURIComponent(parsed.contacto) +
-    '&data_sessao=eq.' + dataHoje +
+    '&data_sessao=eq.' + dataEvento +
     '&tipo_sessao_id=eq.' + parsed.tipo +
     '&select=id',
     'GET'
@@ -168,15 +167,16 @@ function registarSessao(parsed, eventoId) {
 
   if (existente && existente.length > 0) return;
 
-  const mesBriefing = hoje.getFullYear() + '-' + String(hoje.getMonth() + 1).padStart(2, '0');
+  const dataObj = new Date(dataEvento + 'T12:00:00');
+  const mesBriefing = dataObj.getFullYear() + '-' + String(dataObj.getMonth() + 1).padStart(2, '0');
 
-  garantirBriefing(mesBriefing, hoje.getFullYear(), hoje.getMonth() + 1);
+  garantirBriefing(mesBriefing, dataObj.getFullYear(), dataObj.getMonth() + 1);
 
   const payload = {
     num_socio:         parsed.numSocio,
     contacto:          parsed.contacto,
     tipo_sessao_id:    parsed.tipo,
-    data_sessao:       hoje.toISOString().split('T')[0],
+    data_sessao:       dataEvento,
     estado:            'realizada',
     mes_briefing:      mesBriefing,
     incluida_briefing: false,
