@@ -211,7 +211,7 @@ export default function FinanceiroPage() {
   )
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold text-gray-900">Financeiro</h1>
         <div className="flex gap-2">
@@ -228,7 +228,7 @@ export default function FinanceiroPage() {
 
       {/* FORM NOVA SESSÃO */}
       {novasSessao && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-3">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 space-y-3">
           <h2 className="font-semibold">Registar sessão</h2>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
@@ -285,7 +285,7 @@ export default function FinanceiroPage() {
           : (
             <div className="space-y-3">
               {briefings.map((b) => (
-                <div key={b.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div key={b.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
@@ -308,7 +308,7 @@ export default function FinanceiroPage() {
                       </div>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-4 gap-3">
+                    <div className="mt-3 grid grid-cols-4 gap-3">
                       <FinRow label="Bruto" value={fmt(b.total_bruto)} />
                       <FinRow label={`IRS ${(taxaIrs * 100).toFixed(1)}%`} value={`-${fmt(b.irs_retido)}`} negative />
                       <FinRow label="SS" value={`-${fmt(b.ss_pagar)}`} negative />
@@ -362,7 +362,7 @@ export default function FinanceiroPage() {
           : (
             <div className="space-y-2">
               {ss.map((s) => (
-                <div key={s.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 grid grid-cols-3 gap-3">
+                <div key={s.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 grid grid-cols-3 gap-3">
                   <FinRow label="Referência" value={`T${s.trimestre_referencia} ${s.ano_referencia}`} />
                   <FinRow label="Base mensal" value={fmt(s.base_incidencia)} />
                   <FinRow label="SS mensal" value={fmt(s.contribuicao_mensal)} negative />
@@ -380,8 +380,8 @@ export default function FinanceiroPage() {
           : (
             <div className="space-y-2">
               {bonus.map((b) => (
-                <div key={b.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                  <div className="flex items-center justify-between mb-3">
+                <div key={b.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-3">
+                  <div className="flex items-center justify-between mb-2">
                     <span className="font-bold text-lg text-gray-900">T{b.trimestre} {b.ano}</span>
                     <div className="flex gap-2">
                       <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${b.atingido ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
