@@ -48,6 +48,7 @@ export interface TarefaHoje {
   num_socio: string
   aluno_tipo: TipoAluno
   urgencia: UrgenciaTarefa
+  calendar_event_id?: string | null
 }
 
 export interface NivelRemuneracao {

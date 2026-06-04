@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase, Aluno, TarefaFollowup, TipoAluno } from '@/lib/supabase'
 import { gerarMensagem, gerarLinkWhatsApp } from '@/lib/whatsapp'
+import { confirmarPlanoViaScript, appsScriptConfigurado } from '@/lib/appsscript'
 
 const TIPO_LABEL: Record<TipoAluno, string> = { rep: 'Rep', oi: 'OI', treino_oferta: 'Treino Oferta' }
 const TIPO_COLOR: Record<TipoAluno, string> = {
@@ -54,28 +55,42 @@ export default function AlunosPage() {
   }
 
   async function confirmarPlano(aluno: Aluno) {
-    await supabase
-      .from('alunos')
-      .update({ plano_confirmado_em: new Date().toISOString() })
-      .eq('num_socio', aluno.num_socio)
-      .eq('contacto', aluno.contacto)
+    const dataConfirmacao = new Date().toISOString().slice(0, 10)
 
-    const marcos = ['d7', 'd30', 'd60', 'd120']
-    const dias = [7, 30, 60, 120]
-    const base = aluno.ultima_avaliacao ? new Date(aluno.ultima_avaliacao) : new Date()
-    const tarefas = marcos.map((m, i) => {
-      const d = new Date(base)
-      d.setDate(d.getDate() + dias[i])
-      return {
+    if (appsScriptConfigurado()) {
+      // Apps Script cria eventos no Calendar + tarefas no Supabase
+      await confirmarPlanoViaScript({
         num_socio: aluno.num_socio,
         contacto: aluno.contacto,
-        tipo: m,
-        data_prevista: d.toISOString().slice(0, 10),
-        estado: 'pendente',
-        mensagem: null,
-      }
-    })
-    await supabase.from('tarefas_followup').upsert(tarefas, { onConflict: 'num_socio,contacto,tipo' })
+        nome: aluno.nome,
+        tipo: aluno.tipo,
+        data_confirmacao: dataConfirmacao,
+      })
+    } else {
+      // Fallback: escrever directamente no Supabase sem eventos Calendar
+      await supabase
+        .from('alunos')
+        .update({ plano_confirmado_em: dataConfirmacao })
+        .eq('num_socio', aluno.num_socio)
+        .eq('contacto', aluno.contacto)
+
+      const marcos = ['d7', 'd30', 'd60', 'd120']
+      const dias = [7, 30, 60, 120]
+      const base = aluno.ultima_avaliacao ? new Date(aluno.ultima_avaliacao) : new Date()
+      const tarefas = marcos.map((m, i) => {
+        const d = new Date(base)
+        d.setDate(d.getDate() + dias[i])
+        return {
+          num_socio: aluno.num_socio,
+          contacto: aluno.contacto,
+          tipo: m,
+          data_prevista: d.toISOString().slice(0, 10),
+          estado: 'pendente',
+          mensagem: null,
+        }
+      })
+      await supabase.from('tarefas_followup').upsert(tarefas, { onConflict: 'num_socio,contacto,tipo' })
+    }
     load()
   }
 
