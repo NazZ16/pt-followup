@@ -29,8 +29,11 @@ export default function AlunosPage() {
   const [filtroTipo, setFiltroTipo] = useState<TipoAluno | 'todos'>('todos')
   const [filtroConvertido, setFiltroConvertido] = useState<'todos' | 'pt' | 'nao_pt'>('todos')
   const [filtroPlano, setFiltroPlano] = useState<'todos' | 'confirmado' | 'sem_plano'>('todos')
+  const [mostrarInativos, setMostrarInativos] = useState(false)
   const [expandido, setExpandido] = useState<string | null>(null)
   const [historicoAberto, setHistoricoAberto] = useState<string | null>(null)
+  const [editandoNotas, setEditandoNotas] = useState<string | null>(null)
+  const [notas, setNotas] = useState('')
   const [novoAluno, setNovoAluno] = useState(false)
   const [form, setForm] = useState({ num_socio: '', contacto: '', nome: '', tipo: 'rep' as TipoAluno, ultima_avaliacao: '' })
   const [saving, setSaving] = useState(false)
@@ -87,6 +90,18 @@ export default function AlunosPage() {
     load()
   }
 
+  async function toggleEstado(aluno: Aluno) {
+    const novoEstado = aluno.estado === 'ativo' ? 'inativo' : 'ativo'
+    await supabase.from('alunos').update({ estado: novoEstado }).eq('num_socio', aluno.num_socio).eq('contacto', aluno.contacto)
+    load()
+  }
+
+  async function guardarNotas(aluno: Aluno) {
+    await supabase.from('alunos').update({ notas }).eq('num_socio', aluno.num_socio).eq('contacto', aluno.contacto)
+    setEditandoNotas(null)
+    load()
+  }
+
   async function salvarNovoAluno() {
     if (!form.num_socio || !form.contacto || !form.nome) return
     setSaving(true)
@@ -98,6 +113,7 @@ export default function AlunosPage() {
   }
 
   const filtrados = alunos.filter((a) => {
+    if (!mostrarInativos && a.estado === 'inativo') return false
     if (busca && !a.nome.toLowerCase().includes(busca.toLowerCase()) && !a.num_socio.includes(busca) && !a.contacto.includes(busca)) return false
     if (filtroTipo !== 'todos' && a.tipo !== filtroTipo) return false
     if (filtroConvertido === 'pt' && !a.convertido) return false
@@ -141,6 +157,10 @@ export default function AlunosPage() {
           <option value="confirmado">Plano confirmado</option>
           <option value="sem_plano">Sem plano</option>
         </select>
+        <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer">
+          <input type="checkbox" checked={mostrarInativos} onChange={(e) => setMostrarInativos(e.target.checked)} className="rounded" />
+          Mostrar inativos
+        </label>
       </div>
 
       {novoAluno && (
@@ -175,15 +195,17 @@ export default function AlunosPage() {
           const key = `${aluno.num_socio}-${aluno.contacto}`
           const aberto = expandido === key
           const verHistorico = historicoAberto === key
+          const inativo = aluno.estado === 'inativo'
           return (
-            <div key={key} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div key={key} className={`bg-white border rounded-xl overflow-hidden ${inativo ? 'border-gray-200 opacity-60' : 'border-gray-200'}`}>
               <button className="w-full text-left p-3 flex items-center gap-3" onClick={() => setExpandido(aberto ? null : key)}>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-sm">{aluno.nome}</span>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TIPO_COLOR[aluno.tipo]}`}>{TIPO_LABEL[aluno.tipo]}</span>
                     {aluno.convertido && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-800">PT</span>}
-                    {!aluno.plano_confirmado_em && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-orange-100 text-orange-700">Sem plano</span>}
+                    {inativo && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-200 text-gray-600">Inativo</span>}
+                    {!aluno.plano_confirmado_em && !inativo && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-orange-100 text-orange-700">Sem plano</span>}
                     {aluno.tarefas.length > 0 && (
                       <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-yellow-100 text-yellow-800">{aluno.tarefas.length} pendente{aluno.tarefas.length > 1 ? 's' : ''}</span>
                     )}
@@ -199,7 +221,7 @@ export default function AlunosPage() {
               {aberto && (
                 <div className="border-t border-gray-100 p-3 space-y-3">
                   <div className="flex gap-2 flex-wrap">
-                    {!aluno.plano_confirmado_em && (
+                    {!aluno.plano_confirmado_em && !inativo && (
                       <button onClick={() => confirmarPlano(aluno)} className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
                         ✓ Plano na app
                       </button>
@@ -208,6 +230,29 @@ export default function AlunosPage() {
                       className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${aluno.convertido ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
                       {aluno.convertido ? '★ PT activo' : '☆ Marcar como PT'}
                     </button>
+                    <button onClick={() => toggleEstado(aluno)}
+                      className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${inativo ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}>
+                      {inativo ? 'Reativar' : 'Inativar'}
+                    </button>
+                  </div>
+
+                  {/* Notas */}
+                  <div>
+                    {editandoNotas === key ? (
+                      <div className="space-y-2">
+                        <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={3}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Notas sobre o aluno..." />
+                        <div className="flex gap-2">
+                          <button onClick={() => guardarNotas(aluno)} className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">Guardar</button>
+                          <button onClick={() => setEditandoNotas(null)} className="text-xs px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">Cancelar</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button onClick={() => { setEditandoNotas(key); setNotas(aluno.notas ?? '') }}
+                        className="text-xs text-gray-500 hover:text-gray-800 text-left w-full">
+                        {aluno.notas ? <span className="italic">{aluno.notas}</span> : <span className="text-gray-400">+ Adicionar nota</span>}
+                      </button>
+                    )}
                   </div>
 
                   {/* Follow-ups pendentes */}
