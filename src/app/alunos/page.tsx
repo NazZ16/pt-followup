@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase, Aluno, TarefaFollowup, TipoAluno, TipoFollowup } from '@/lib/supabase'
+import { supabase, Aluno, TarefaFollowup, TipoAluno, TipoFollowup, ServicoPT } from '@/lib/supabase'
 import { gerarMensagem, gerarLinkWhatsApp } from '@/lib/whatsapp'
 import { confirmarPlanoViaScript, appsScriptConfigurado } from '@/lib/appsscript'
 
@@ -40,15 +40,23 @@ export default function AlunosPage() {
   const [novoAluno, setNovoAluno] = useState(false)
   const [form, setForm] = useState({ num_socio: '', contacto: '', nome: '', tipo: 'rep' as TipoAluno, ultima_avaliacao: '' })
   const [saving, setSaving] = useState(false)
+  const [servicosPT, setServicosPT] = useState<ServicoPT[]>([])
+  const [marcandoPT, setMarcandoPT] = useState<string | null>(null)
+  const [formPT, setFormPT] = useState({ plano_pt: '', horas_pt_semanais: '' })
 
   useEffect(() => { load() }, [])
 
   async function load() {
     setLoading(true)
-    const { data: aData } = await supabase.from('alunos').select('*').order('nome')
-    const { data: tData } = await supabase.from('tarefas_followup').select('*').order('data_prevista')
+    const [{ data: aData }, { data: tData }, { data: spData }] = await Promise.all([
+      supabase.from('alunos').select('*').order('nome'),
+      supabase.from('tarefas_followup').select('*').order('data_prevista'),
+      supabase.from('servicos_pt').select('*').order('horas_semanais'),
+    ])
+    setServicosPT((spData as ServicoPT[]) || [])
     const pendentesMap: Record<string, TarefaFollowup[]> = {}
     const todasMap: Record<string, TarefaFollowup[]> = {}
+
     for (const t of (tData as TarefaFollowup[]) || []) {
       const key = `${t.num_socio}-${t.contacto}`
       if (!todasMap[key]) todasMap[key] = []
@@ -80,8 +88,19 @@ export default function AlunosPage() {
     load()
   }
 
-  async function toggleConvertido(aluno: Aluno) {
-    await supabase.from('alunos').update({ convertido: !aluno.convertido }).eq('num_socio', aluno.num_socio).eq('contacto', aluno.contacto)
+  async function confirmarPT(aluno: Aluno) {
+    await supabase.from('alunos').update({
+      convertido: true,
+      plano_pt: formPT.plano_pt || null,
+      horas_pt_semanais: formPT.horas_pt_semanais ? Number(formPT.horas_pt_semanais) : null,
+    }).eq('num_socio', aluno.num_socio).eq('contacto', aluno.contacto)
+    setMarcandoPT(null)
+    setFormPT({ plano_pt: '', horas_pt_semanais: '' })
+    load()
+  }
+
+  async function desmarcarPT(aluno: Aluno) {
+    await supabase.from('alunos').update({ convertido: false, plano_pt: null, horas_pt_semanais: null }).eq('num_socio', aluno.num_socio).eq('contacto', aluno.contacto)
     load()
   }
 
@@ -205,7 +224,10 @@ export default function AlunosPage() {
                     {!aluno.plano_confirmado_em && !inativo && <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700">Sem plano</span>}
                     {aluno.tarefas.length > 0 && <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-red-100 text-red-700">{aluno.tarefas.length}✗</span>}
                   </div>
-                  <p className="text-xs text-gray-400">{aluno.contacto} · Nº {aluno.num_socio}{aluno.ultima_avaliacao && ` · ${aluno.ultima_avaliacao}`}</p>
+                  <p className="text-xs text-gray-400">
+                    {aluno.contacto} · Nº {aluno.num_socio}{aluno.ultima_avaliacao && ` · ${aluno.ultima_avaliacao}`}
+                    {aluno.plano_pt && ` · ${aluno.plano_pt}`}{aluno.horas_pt_semanais && ` · ${aluno.horas_pt_semanais}h/sem`}
+                  </p>
                 </div>
                 <span className="text-gray-300 text-xs shrink-0">{aberto ? '▲' : '▼'}</span>
               </button>
@@ -217,10 +239,17 @@ export default function AlunosPage() {
                     {!aluno.plano_confirmado_em && !inativo && (
                       <button onClick={() => confirmarPlano(aluno)} className="px-2.5 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors">✓ Confirmar plano</button>
                     )}
-                    <button onClick={() => toggleConvertido(aluno)}
-                      className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${aluno.convertido ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
-                      {aluno.convertido ? '★ PT activo' : '☆ Marcar PT'}
-                    </button>
+                    {aluno.convertido ? (
+                      <button onClick={() => desmarcarPT(aluno)}
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors bg-emerald-600 text-white hover:bg-emerald-700">
+                        ★ PT activo
+                      </button>
+                    ) : (
+                      <button onClick={() => { setMarcandoPT(key); setFormPT({ plano_pt: '', horas_pt_semanais: '' }) }}
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300">
+                        ☆ Marcar PT
+                      </button>
+                    )}
                     <button onClick={() => toggleEstado(aluno)}
                       className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${inativo ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}>
                       {inativo ? 'Reativar' : 'Inativar'}
@@ -228,6 +257,62 @@ export default function AlunosPage() {
                     <button onClick={() => { setEditandoAluno(key); setFormEdit({ nome: aluno.nome, contacto: aluno.contacto, num_socio: aluno.num_socio, tipo: aluno.tipo, ultima_avaliacao: aluno.ultima_avaliacao ?? '' }) }}
                       className="px-2.5 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-300 transition-colors">✏️ Editar</button>
                   </div>
+
+                  {/* Marcar PT — form de serviço */}
+                  {marcandoPT === key && (
+                    <div className="bg-white rounded-lg border border-emerald-200 p-2.5 space-y-2">
+                      <p className="text-xs font-semibold text-gray-700">Serviço fechado</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="col-span-2">
+                          <select
+                            value={formPT.plano_pt}
+                            onChange={e => {
+                              const sv = servicosPT.find(s => s.nome === e.target.value)
+                              setFormPT({ plano_pt: e.target.value, horas_pt_semanais: sv ? String(sv.horas_semanais) : formPT.horas_pt_semanais })
+                            }}
+                            className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">Selecionar serviço...</option>
+                            {servicosPT.map(sv => (
+                              <option key={sv.id} value={sv.nome}>{sv.nome} ({sv.horas_semanais}h/sem)</option>
+                            ))}
+                            <option value="__outro__">Outro (manual)</option>
+                          </select>
+                        </div>
+                        {(formPT.plano_pt === '__outro__' || (formPT.plano_pt && !servicosPT.find(s => s.nome === formPT.plano_pt))) && (
+                          <input value={formPT.plano_pt === '__outro__' ? '' : formPT.plano_pt}
+                            placeholder="Nome do serviço"
+                            onChange={e => setFormPT({ ...formPT, plano_pt: e.target.value })}
+                            className="col-span-2 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        )}
+                        <div className="flex items-center gap-2">
+                          <input type="number" step="0.5" min="0" value={formPT.horas_pt_semanais}
+                            onChange={e => setFormPT({ ...formPT, horas_pt_semanais: e.target.value })}
+                            placeholder="0"
+                            className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                          <span className="text-xs text-gray-500">horas/semana</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => confirmarPT(aluno)}
+                          className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-semibold hover:bg-emerald-700 transition-colors">
+                          Confirmar PT
+                        </button>
+                        <button onClick={() => setMarcandoPT(null)}
+                          className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200 transition-colors">
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Plano PT activo */}
+                  {aluno.convertido && (aluno.plano_pt || aluno.horas_pt_semanais) && (
+                    <div className="bg-emerald-50 rounded-lg px-2.5 py-2 flex items-center gap-3">
+                      <span className="text-xs font-semibold text-emerald-700">Plano PT</span>
+                      {aluno.plano_pt && <span className="text-xs text-emerald-800">{aluno.plano_pt}</span>}
+                      {aluno.horas_pt_semanais && <span className="text-xs text-emerald-700 ml-auto">{aluno.horas_pt_semanais}h/sem</span>}
+                    </div>
+                  )}
 
                   {/* Editar dados */}
                   {editandoAluno === key && (
