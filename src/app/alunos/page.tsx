@@ -4,24 +4,15 @@ import { useEffect, useState } from 'react'
 import { supabase, Aluno, TarefaFollowup, TipoAluno } from '@/lib/supabase'
 import { gerarMensagem, gerarLinkWhatsApp } from '@/lib/whatsapp'
 
-const TIPO_LABEL: Record<TipoAluno, string> = {
-  rep: 'Rep',
-  oi: 'OI',
-  treino_oferta: 'Treino Oferta',
-}
-
+const TIPO_LABEL: Record<TipoAluno, string> = { rep: 'Rep', oi: 'OI', treino_oferta: 'Treino Oferta' }
 const TIPO_COLOR: Record<TipoAluno, string> = {
   rep: 'bg-purple-100 text-purple-800',
   oi: 'bg-blue-100 text-blue-800',
   treino_oferta: 'bg-green-100 text-green-800',
 }
-
 const MARCO_LABEL: Record<string, string> = { d7: 'D+7', d30: 'D+30', d60: 'D+60', d120: 'D+120' }
 const ESTADO_LABEL: Record<string, string> = {
-  pendente: 'Pendente',
-  realizado: 'Realizado',
-  nao_realizado: 'Não realizado',
-  adiado: 'Adiado',
+  pendente: 'Pendente', realizado: 'Realizado', nao_realizado: 'Não realizado', adiado: 'Adiado',
 }
 
 type AlunoComTarefas = Aluno & { tarefas: TarefaFollowup[] }
@@ -32,7 +23,7 @@ export default function AlunosPage() {
   const [busca, setBusca] = useState('')
   const [expandido, setExpandido] = useState<string | null>(null)
   const [novoAluno, setNovoAluno] = useState(false)
-  const [form, setForm] = useState({ num_socio: '', contacto: '', nome: '', tipo: 'rep' as TipoAluno, data_avaliacao: '' })
+  const [form, setForm] = useState({ num_socio: '', contacto: '', nome: '', tipo: 'rep' as TipoAluno, ultima_avaliacao: '' })
   const [saving, setSaving] = useState(false)
 
   useEffect(() => { load() }, [])
@@ -48,7 +39,7 @@ export default function AlunosPage() {
 
     const tarefasByAluno: Record<string, TarefaFollowup[]> = {}
     for (const t of (tData as TarefaFollowup[]) || []) {
-      const key = `${t.aluno_num_socio}-${t.aluno_contacto}`
+      const key = `${t.num_socio}-${t.contacto}`
       if (!tarefasByAluno[key]) tarefasByAluno[key] = []
       tarefasByAluno[key].push(t)
     }
@@ -65,30 +56,26 @@ export default function AlunosPage() {
   async function confirmarPlano(aluno: Aluno) {
     await supabase
       .from('alunos')
-      .update({ plano_confirmado: true })
+      .update({ plano_confirmado_em: new Date().toISOString() })
       .eq('num_socio', aluno.num_socio)
       .eq('contacto', aluno.contacto)
 
-    // criar tarefas de follow-up
     const marcos = ['d7', 'd30', 'd60', 'd120']
     const dias = [7, 30, 60, 120]
-    const base = aluno.data_avaliacao ? new Date(aluno.data_avaliacao) : new Date()
+    const base = aluno.ultima_avaliacao ? new Date(aluno.ultima_avaliacao) : new Date()
     const tarefas = marcos.map((m, i) => {
       const d = new Date(base)
       d.setDate(d.getDate() + dias[i])
       return {
-        aluno_num_socio: aluno.num_socio,
-        aluno_contacto: aluno.contacto,
-        aluno_nome: aluno.nome,
-        aluno_tipo: aluno.tipo,
-        tipo_followup: m,
+        num_socio: aluno.num_socio,
+        contacto: aluno.contacto,
+        tipo: m,
         data_prevista: d.toISOString().slice(0, 10),
         estado: 'pendente',
+        mensagem: null,
       }
     })
-    await supabase.from('tarefas_followup').upsert(tarefas, {
-      onConflict: 'aluno_num_socio,aluno_contacto,tipo_followup',
-    })
+    await supabase.from('tarefas_followup').upsert(tarefas, { onConflict: 'num_socio,contacto,tipo' })
     load()
   }
 
@@ -110,10 +97,9 @@ export default function AlunosPage() {
       nome: form.nome,
       tipo: form.tipo,
       convertido: false,
-      plano_confirmado: false,
-      data_avaliacao: form.data_avaliacao || null,
+      ultima_avaliacao: form.ultima_avaliacao || null,
     }, { onConflict: 'num_socio,contacto' })
-    setForm({ num_socio: '', contacto: '', nome: '', tipo: 'rep', data_avaliacao: '' })
+    setForm({ num_socio: '', contacto: '', nome: '', tipo: 'rep', ultima_avaliacao: '' })
     setNovoAluno(false)
     setSaving(false)
     load()
@@ -131,21 +117,15 @@ export default function AlunosPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Alunos</h1>
-        <button
-          onClick={() => setNovoAluno(true)}
-          className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
+        <button onClick={() => setNovoAluno(true)}
+          className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
           + Novo aluno
         </button>
       </div>
 
-      <input
-        type="search"
-        placeholder="Pesquisar nome, nº sócio ou contacto..."
-        value={busca}
-        onChange={(e) => setBusca(e.target.value)}
-        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
+      <input type="search" placeholder="Pesquisar nome, nº sócio ou contacto..."
+        value={busca} onChange={(e) => setBusca(e.target.value)}
+        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
 
       {novoAluno && (
         <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
@@ -163,7 +143,7 @@ export default function AlunosPage() {
               <option value="oi">OI</option>
               <option value="treino_oferta">Treino Oferta</option>
             </select>
-            <input type="date" value={form.data_avaliacao} onChange={(e) => setForm({ ...form, data_avaliacao: e.target.value })}
+            <input type="date" value={form.ultima_avaliacao} onChange={(e) => setForm({ ...form, ultima_avaliacao: e.target.value })}
               className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div className="flex gap-2">
@@ -186,10 +166,8 @@ export default function AlunosPage() {
           const aberto = expandido === key
           return (
             <div key={key} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-              <button
-                className="w-full text-left p-3 flex items-center gap-3"
-                onClick={() => setExpandido(aberto ? null : key)}
-              >
+              <button className="w-full text-left p-3 flex items-center gap-3"
+                onClick={() => setExpandido(aberto ? null : key)}>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-sm">{aluno.nome}</span>
@@ -199,13 +177,13 @@ export default function AlunosPage() {
                     {aluno.convertido && (
                       <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-800">PT</span>
                     )}
-                    {!aluno.plano_confirmado && (
+                    {!aluno.plano_confirmado_em && (
                       <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-orange-100 text-orange-700">Sem plano</span>
                     )}
                   </div>
                   <p className="text-xs text-gray-500 mt-0.5">
                     {aluno.contacto} · Nº {aluno.num_socio}
-                    {aluno.data_avaliacao && ` · Avaliação: ${aluno.data_avaliacao}`}
+                    {aluno.ultima_avaliacao && ` · Avaliação: ${aluno.ultima_avaliacao}`}
                   </p>
                 </div>
                 <span className="text-gray-400 text-xs">{aberto ? '▲' : '▼'}</span>
@@ -214,22 +192,18 @@ export default function AlunosPage() {
               {aberto && (
                 <div className="border-t border-gray-100 p-3 space-y-3">
                   <div className="flex gap-2 flex-wrap">
-                    {!aluno.plano_confirmado && (
-                      <button
-                        onClick={() => confirmarPlano(aluno)}
-                        className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                      >
+                    {!aluno.plano_confirmado_em && (
+                      <button onClick={() => confirmarPlano(aluno)}
+                        className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
                         ✓ Plano na app
                       </button>
                     )}
-                    <button
-                      onClick={() => toggleConvertido(aluno)}
+                    <button onClick={() => toggleConvertido(aluno)}
                       className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${
                         aluno.convertido
                           ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                           : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                      }`}
-                    >
+                      }`}>
                       {aluno.convertido ? '★ PT activo' : '☆ Marcar como PT'}
                     </button>
                   </div>
@@ -239,11 +213,11 @@ export default function AlunosPage() {
                       <p className="text-xs font-medium text-gray-600 mb-1">Follow-ups pendentes</p>
                       <div className="space-y-1">
                         {aluno.tarefas.map((t) => {
-                          const msg = gerarMensagem(aluno.nome, aluno.tipo, t.tipo_followup as 'd7' | 'd30' | 'd60' | 'd120')
+                          const msg = gerarMensagem(aluno.nome, aluno.tipo, t.tipo)
                           const link = gerarLinkWhatsApp(aluno.contacto, msg)
                           return (
                             <div key={t.id} className="flex items-center gap-2 text-xs text-gray-700 bg-gray-50 rounded-lg px-2 py-1.5">
-                              <span className="font-medium">{MARCO_LABEL[t.tipo_followup]}</span>
+                              <span className="font-medium">{MARCO_LABEL[t.tipo]}</span>
                               <span className="text-gray-400">·</span>
                               <span>{t.data_prevista}</span>
                               <span className="text-gray-400">·</span>

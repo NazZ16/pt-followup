@@ -17,25 +17,36 @@ export interface Aluno {
   nome: string
   tipo: TipoAluno
   convertido: boolean
-  plano_confirmado: boolean
-  data_avaliacao: string | null
-  created_at: string
+  ultima_avaliacao: string | null
+  plano_confirmado_em: string | null
+  estado: string | null
+  notas: string | null
+  criado_em: string
+  atualizado_em: string
 }
 
 export interface TarefaFollowup {
   id: string
-  aluno_num_socio: string
-  aluno_contacto: string
-  aluno_nome: string
-  aluno_tipo: TipoAluno
-  tipo_followup: 'd7' | 'd30' | 'd60' | 'd120'
+  num_socio: string
+  contacto: string
+  tipo: 'd7' | 'd30' | 'd60' | 'd120'
   data_prevista: string
   estado: EstadoTarefa
+  mensagem: string | null
   calendar_event_id: string | null
-  created_at: string
+  criado_em: string
 }
 
-export interface TarefaHoje extends TarefaFollowup {
+export interface TarefaHoje {
+  id: string
+  tipo: 'd7' | 'd30' | 'd60' | 'd120'
+  data_prevista: string
+  estado: EstadoTarefa
+  mensagem: string | null
+  nome: string
+  contacto: string
+  num_socio: string
+  aluno_tipo: TipoAluno
   urgencia: UrgenciaTarefa
 }
 
@@ -94,12 +105,14 @@ export interface BonusTrimestral {
 }
 
 export interface MesCorrente {
+  total_sessoes: number
+  horas_nivel: number
   bruto_acumulado: number
-  horas_contabilizadas: number
   nivel_atual: number
-  estimativa_liquido: number
-  bonus_threshold: number
-  bonus_valor: number
+  nivel_horas_min: number
+  nivel_horas_max: number | null
   taxa_irs: number
+  irs_estimado: number
   ss_mensal: number
+  liquido_estimado: number
 }
