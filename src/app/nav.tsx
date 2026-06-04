@@ -34,31 +34,29 @@ export default function Nav() {
         </div>
       </nav>
 
-      {/* Mobile top bar */}
-      <div className="sm:hidden bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="px-4 h-12 flex items-center">
-          <span className="font-bold text-base text-blue-600 tracking-tight">PT Follow-up</span>
-        </div>
-      </div>
-
-      {/* Mobile bottom tab bar */}
-      <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-gray-200 shadow-[0_-1px_8px_rgba(0,0,0,0.08)]">
-        <div className="grid grid-cols-4">
-          {links.map((l) => {
-            const active = path === l.href
-            return (
-              <Link
-                key={l.href}
-                href={l.href}
-                className={`flex flex-col items-center justify-center py-2 gap-0.5 transition-colors ${
-                  active ? 'text-blue-600' : 'text-gray-500'
-                }`}
-              >
-                <span className="text-lg leading-none">{l.icon}</span>
-                <span className={`text-[10px] font-medium ${active ? 'text-blue-600' : 'text-gray-500'}`}>{l.label}</span>
-              </Link>
-            )
-          })}
+      {/* Mobile top nav */}
+      <nav className="sm:hidden bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+        <div className="flex items-center h-13">
+          <span className="font-bold text-sm text-blue-600 tracking-tight px-3 shrink-0">PT Follow-up</span>
+          <div className="flex flex-1 overflow-x-auto scrollbar-none">
+            {links.map((l) => {
+              const active = path === l.href
+              return (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className={`flex items-center gap-1.5 px-3 py-3.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
+                    active
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-gray-500'
+                  }`}
+                >
+                  <span className="text-base leading-none">{l.icon}</span>
+                  {l.label}
+                </Link>
+              )
+            })}
+          </div>
         </div>
       </nav>
     </>
