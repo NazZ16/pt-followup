@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase, Aluno, TarefaFollowup, TipoAluno } from '@/lib/supabase'
+import { supabase, Aluno, TarefaFollowup, TipoAluno, TipoFollowup } from '@/lib/supabase'
 import { gerarMensagem, gerarLinkWhatsApp } from '@/lib/whatsapp'
 import { confirmarPlanoViaScript, appsScriptConfigurado } from '@/lib/appsscript'
 
@@ -11,7 +11,7 @@ const TIPO_COLOR: Record<TipoAluno, string> = {
   oi: 'bg-blue-100 text-blue-800',
   treino_oferta: 'bg-green-100 text-green-800',
 }
-const MARCO_LABEL: Record<string, string> = { d7: 'D+7', d30: 'D+30', d60: 'D+60', d120: 'D+120' }
+const MARCO_LABEL: Record<TipoFollowup, string> = { '7d': 'D+7', '30d': 'D+30', '60d': 'D+60', '120d': 'D+120' }
 const ESTADO_LABEL: Record<string, string> = {
   pendente: 'Pendente', realizado: 'Realizado', nao_realizado: 'Não realizado', adiado: 'Adiado',
 }
@@ -55,10 +55,9 @@ export default function AlunosPage() {
   }
 
   async function confirmarPlano(aluno: Aluno) {
-    const dataConfirmacao = new Date().toISOString().slice(0, 10)
+    const dataConfirmacao = aluno.ultima_avaliacao || new Date().toISOString().slice(0, 10)
 
     if (appsScriptConfigurado()) {
-      // Apps Script cria eventos no Calendar + tarefas no Supabase
       await confirmarPlanoViaScript({
         num_socio: aluno.num_socio,
         contacto: aluno.contacto,
@@ -67,29 +66,29 @@ export default function AlunosPage() {
         data_confirmacao: dataConfirmacao,
       })
     } else {
-      // Fallback: escrever directamente no Supabase sem eventos Calendar
       await supabase
         .from('alunos')
         .update({ plano_confirmado_em: dataConfirmacao })
         .eq('num_socio', aluno.num_socio)
         .eq('contacto', aluno.contacto)
 
-      const marcos = ['d7', 'd30', 'd60', 'd120']
-      const dias = [7, 30, 60, 120]
-      const base = aluno.ultima_avaliacao ? new Date(aluno.ultima_avaliacao) : new Date()
-      const tarefas = marcos.map((m, i) => {
+      const marcos: { tipo: TipoFollowup; dias: number }[] = [
+        { tipo: '7d', dias: 7 }, { tipo: '30d', dias: 30 },
+        { tipo: '60d', dias: 60 }, { tipo: '120d', dias: 120 },
+      ]
+      const base = new Date(dataConfirmacao)
+      for (const { tipo, dias } of marcos) {
         const d = new Date(base)
-        d.setDate(d.getDate() + dias[i])
-        return {
+        d.setDate(d.getDate() + dias)
+        await supabase.from('tarefas_followup').insert({
           num_socio: aluno.num_socio,
           contacto: aluno.contacto,
-          tipo: m,
+          tipo,
           data_prevista: d.toISOString().slice(0, 10),
           estado: 'pendente',
           mensagem: null,
-        }
-      })
-      await supabase.from('tarefas_followup').upsert(tarefas, { onConflict: 'num_socio,contacto,tipo' })
+        })
+      }
     }
     load()
   }
