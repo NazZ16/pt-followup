@@ -15,7 +15,8 @@ const URGENCIA_LABEL: Record<string, string> = {
 }
 const MARCO_LABEL: Record<string, string> = { d7: 'D+7', d30: 'D+30', d60: 'D+60', d120: 'D+120' }
 
-function fmt(v: number) {
+function fmt(v: number | null) {
+  if (v == null) return '—'
   return v.toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' })
 }
 
@@ -112,8 +113,8 @@ export default function BriefingPage() {
           <h2 className="text-base font-semibold mb-3">💰 Mês em curso</h2>
           <div className="bg-white rounded-xl border border-gray-200 p-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Stat label="Bruto acumulado" value={fmt(mes.bruto_acumulado)} />
-            <Stat label="Nível atual" value={`Nível ${mes.nivel_atual}`} />
-            <Stat label="Horas contadas" value={`${mes.horas_nivel}h`} />
+            <Stat label="Nível atual" value={mes.nivel_atual != null ? `Nível ${mes.nivel_atual}` : '—'} />
+            <Stat label="Horas contadas" value={mes.horas_nivel != null ? `${mes.horas_nivel}h` : '—'} />
             <Stat label="Líquido estimado" value={fmt(mes.liquido_estimado)} />
           </div>
         </section>
