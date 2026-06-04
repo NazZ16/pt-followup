@@ -38,6 +38,8 @@ export default function AlunosPage() {
   const [historicoAberto, setHistoricoAberto] = useState<string | null>(null)
   const [editandoNotas, setEditandoNotas] = useState<string | null>(null)
   const [notas, setNotas] = useState('')
+  const [editandoAluno, setEditandoAluno] = useState<string | null>(null)
+  const [formEdit, setFormEdit] = useState({ nome: '', contacto: '', num_socio: '', tipo: 'rep' as TipoAluno, ultima_avaliacao: '' })
   const [novoAluno, setNovoAluno] = useState(false)
   const [form, setForm] = useState({ num_socio: '', contacto: '', nome: '', tipo: 'rep' as TipoAluno, ultima_avaliacao: '' })
   const [saving, setSaving] = useState(false)
@@ -97,6 +99,14 @@ export default function AlunosPage() {
   async function toggleEstado(aluno: Aluno) {
     const novoEstado = aluno.estado === 'ativo' ? 'inativo' : 'ativo'
     await supabase.from('alunos').update({ estado: novoEstado }).eq('num_socio', aluno.num_socio).eq('contacto', aluno.contacto)
+    load()
+  }
+
+  async function guardarEdicaoAluno(aluno: Aluno) {
+    await supabase.from('alunos')
+      .update({ nome: formEdit.nome, contacto: formEdit.contacto, num_socio: formEdit.num_socio, tipo: formEdit.tipo, ultima_avaliacao: formEdit.ultima_avaliacao || null })
+      .eq('num_socio', aluno.num_socio).eq('contacto', aluno.contacto)
+    setEditandoAluno(null)
     load()
   }
 
@@ -264,7 +274,44 @@ export default function AlunosPage() {
                       className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${inativo ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}>
                       {inativo ? 'Reativar' : 'Inativar'}
                     </button>
+                    <button onClick={() => { setEditandoAluno(key); setFormEdit({ nome: aluno.nome, contacto: aluno.contacto, num_socio: aluno.num_socio, tipo: aluno.tipo, ultima_avaliacao: aluno.ultima_avaliacao ?? '' }) }}
+                      className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors">
+                      ✏️ Editar
+                    </button>
                   </div>
+
+                  {/* Formulário de edição */}
+                  {editandoAluno === key && (
+                    <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-3">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Editar dados</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input value={formEdit.nome} onChange={(e) => setFormEdit({ ...formEdit, nome: e.target.value })}
+                          placeholder="Nome" className="col-span-2 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <input value={formEdit.num_socio} onChange={(e) => setFormEdit({ ...formEdit, num_socio: e.target.value })}
+                          placeholder="Nº sócio" className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <input value={formEdit.contacto} onChange={(e) => setFormEdit({ ...formEdit, contacto: e.target.value })}
+                          placeholder="Contacto" className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <select value={formEdit.tipo} onChange={(e) => setFormEdit({ ...formEdit, tipo: e.target.value as TipoAluno })}
+                          className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                          <option value="rep">Rep</option>
+                          <option value="oi">OI</option>
+                          <option value="treino_oferta">Treino Oferta</option>
+                        </select>
+                        <input type="date" value={formEdit.ultima_avaliacao} onChange={(e) => setFormEdit({ ...formEdit, ultima_avaliacao: e.target.value })}
+                          className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => guardarEdicaoAluno(aluno)}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors">
+                          Guardar
+                        </button>
+                        <button onClick={() => setEditandoAluno(null)}
+                          className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-200 transition-colors">
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Notas */}
                   <div>
