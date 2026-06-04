@@ -15,7 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="pt" className={`${geist.variable} h-full`}>
       <body className="min-h-full flex flex-col bg-[#F4F6F9] text-gray-900 font-sans">
         <Nav />
-        <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-4 pb-20 sm:pb-6">{children}</main>
+        <main className="flex-1 max-w-5xl w-full mx-auto px-6 py-4 pb-20 sm:pb-6">{children}</main>
       </body>
     </html>
   )
