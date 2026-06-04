@@ -1,7 +1,7 @@
 // ============================================================
 // PT FOLLOW-UP — Google Apps Script
 // Liga o Google Calendar ao Supabase
-// ============================================================
+// ===========================================================
 
 const SUPABASE_URL  = 'https://zvsoymtlmpnfaskjwvos.supabase.co';
 const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp2c295bXRsbXBuZmFza2p3dm9zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1ODM3MTYsImV4cCI6MjA5NjE1OTcxNn0.JilJkj--p_viCJxtbQYg4iO3yOvg7pSm8qOlouzeD3g';
