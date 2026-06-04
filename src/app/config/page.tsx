@@ -179,7 +179,7 @@ export default function ConfigPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-semibold text-base text-gray-800">Códigos da folha de vencimento</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Clica em "Guardar" em cada linha após editar.</p>
+            <p className="text-xs text-gray-500 mt-0.5">{tiposSessao.length} código{tiposSessao.length !== 1 ? 's' : ''} carregado{tiposSessao.length !== 1 ? 's' : ''} · edita e clica Guardar na linha</p>
           </div>
           <button onClick={() => setNovoTipo(true)}
             className="px-4 py-2 bg-gray-800 text-white rounded-xl text-sm font-semibold hover:bg-gray-900 transition-colors shadow-sm">
@@ -242,56 +242,62 @@ export default function ConfigPage() {
           </div>
         )}
 
-        <div className="space-y-2">
-          {tiposSessao.map((t, i) => (
-            <div key={t.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="font-mono text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{t.id}</span>
-                <span className="text-xs text-gray-400">{t.categoria === 'treino' ? 'Treino (por nível)' : 'Avaliação (valor fixo)'}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div className="col-span-2 sm:col-span-1">
-                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Nome</label>
-                  <input value={t.nome}
-                    onChange={(e) => { const c = [...tiposSessao]; c[i] = { ...c[i], nome: e.target.value }; setTiposSessao(c) }}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Duração (min)</label>
-                  <input type="number" value={t.duracao_min ?? ''}
-                    onChange={(e) => { const c = [...tiposSessao]; c[i] = { ...c[i], duracao_min: e.target.value ? Number(e.target.value) : null }; setTiposSessao(c) }}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Valor fixo (€)</label>
-                  <input type="number" step="0.01" value={t.valor_fixo ?? ''} placeholder="—"
-                    onChange={(e) => { const c = [...tiposSessao]; c[i] = { ...c[i], valor_fixo: e.target.value ? Number(e.target.value) : null }; setTiposSessao(c) }}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div className="flex flex-col justify-between">
-                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Conta horas</label>
-                  <label className="flex items-center gap-2 text-sm cursor-pointer py-2">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
+          <table className="w-full text-sm min-w-[600px]">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50">
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Código</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Nome</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-20">Dur. (min)</th>
+                <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-28">Valor fixo (€)</th>
+                <th className="text-center px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Conta horas</th>
+                <th className="px-4 py-2.5 w-40"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {tiposSessao.map((t, i) => (
+                <tr key={t.id}>
+                  <td className="px-4 py-2.5">
+                    <span className="font-mono text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">{t.id}</span>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <input value={t.nome}
+                      onChange={(e) => { const c = [...tiposSessao]; c[i] = { ...c[i], nome: e.target.value }; setTiposSessao(c) }}
+                      className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <input type="number" value={t.duracao_min ?? ''}
+                      onChange={(e) => { const c = [...tiposSessao]; c[i] = { ...c[i], duracao_min: e.target.value ? Number(e.target.value) : null }; setTiposSessao(c) }}
+                      className="w-16 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <input type="number" step="0.01" value={t.valor_fixo ?? ''} placeholder="—"
+                      onChange={(e) => { const c = [...tiposSessao]; c[i] = { ...c[i], valor_fixo: e.target.value ? Number(e.target.value) : null }; setTiposSessao(c) }}
+                      className="w-24 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
                     <input type="checkbox" checked={t.conta_para_nivel}
                       onChange={(e) => { const c = [...tiposSessao]; c[i] = { ...c[i], conta_para_nivel: e.target.checked }; setTiposSessao(c) }}
-                      className="rounded w-4 h-4" />
-                    Conta para nível
-                  </label>
-                </div>
-              </div>
-              <div className="flex gap-2 mt-3">
-                <button onClick={() => salvarTipo(t)} disabled={saving}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                  Guardar
-                </button>
-                {!TIPOS_BASE.includes(t.id) && (
-                  <button onClick={() => eliminarTipo(t.id)} disabled={saving}
-                    className="px-4 py-2 bg-red-50 text-red-600 rounded-xl text-sm font-medium hover:bg-red-100 transition-colors">
-                    Eliminar
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+                      className="w-4 h-4 rounded" />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex gap-1.5 justify-end">
+                      <button onClick={() => salvarTipo(t)} disabled={saving}
+                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                        Guardar
+                      </button>
+                      {!TIPOS_BASE.includes(t.id) && (
+                        <button onClick={() => eliminarTipo(t.id)} disabled={saving}
+                          className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors">
+                          Eliminar
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
 
