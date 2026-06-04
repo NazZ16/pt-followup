@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase, TarefaHoje, MesCorrente, Aluno } from '@/lib/supabase'
 import { gerarMensagem, gerarLinkWhatsApp } from '@/lib/whatsapp'
+import { marcarTarefaViaScript, appsScriptConfigurado } from '@/lib/appsscript'
 
 const URGENCIA_COLOR: Record<string, string> = {
   atrasada: 'bg-red-100 text-red-800',
@@ -48,7 +49,16 @@ export default function BriefingPage() {
   }
 
   async function marcarFeita(tarefa: TarefaHoje) {
-    await supabase.from('tarefas_followup').update({ estado: 'realizado', feito_em: new Date().toISOString() }).eq('id', tarefa.id)
+    if (appsScriptConfigurado()) {
+      // Apps Script apaga o evento do Calendar + actualiza Supabase
+      await marcarTarefaViaScript({
+        tarefa_id: tarefa.id,
+        estado: 'realizado',
+        calendar_event_id: tarefa.calendar_event_id ?? null,
+      })
+    } else {
+      await supabase.from('tarefas_followup').update({ estado: 'realizado', feito_em: new Date().toISOString() }).eq('id', tarefa.id)
+    }
     loadAll()
   }
 
