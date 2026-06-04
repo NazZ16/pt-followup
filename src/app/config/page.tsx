@@ -143,11 +143,13 @@ export default function ConfigPage() {
 
   async function salvarServicoPT(sv: ServicoPT) {
     setSaving(true)
+    const hm = calcHorasMensais(sv)
+    const payload = { nome: sv.nome, tipo: sv.tipo, sessoes_semana: sv.sessoes_semana, duracao_min: sv.duracao_min, horas_mensais: hm }
     let error = null
     if (sv.id) {
-      ({ error } = await supabase.from('servicos_pt').update({ nome: sv.nome, horas_semanais: sv.horas_semanais }).eq('id', sv.id))
+      ({ error } = await supabase.from('servicos_pt').update(payload).eq('id', sv.id))
     } else {
-      ({ error } = await supabase.from('servicos_pt').insert({ nome: sv.nome, horas_semanais: sv.horas_semanais }))
+      ({ error } = await supabase.from('servicos_pt').insert(payload))
     }
     setSaving(false)
     if (error) fail(error.message); else { ok(); load() }
@@ -161,7 +163,12 @@ export default function ConfigPage() {
   }
 
   function addServicoPT() {
-    setServicosPT([...servicosPT, { id: 0, nome: '', horas_semanais: 0 }])
+    setServicosPT([...servicosPT, { id: 0, nome: '', tipo: 'semanal', sessoes_semana: 1, duracao_min: 60, horas_mensais: 0 }])
+  }
+
+  function calcHorasMensais(sv: ServicoPT): number {
+    if (sv.tipo === 'pack') return sv.horas_mensais
+    return Math.round((sv.sessoes_semana ?? 1) * ((sv.duracao_min ?? 60) / 60) * 4.33 * 100) / 100
   }
 
   async function salvarSs(s: SsTrimestral) {
@@ -396,7 +403,7 @@ export default function ConfigPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-semibold text-base text-gray-800">Serviços PT</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Define os planos disponíveis e as horas semanais correspondentes</p>
+            <p className="text-xs text-gray-500 mt-0.5">Semanal: horas calculadas automaticamente (sessões × duração × 4,33). Pack: horas fixas.</p>
           </div>
           <button onClick={addServicoPT}
             className="px-3 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-200 transition-colors">
@@ -406,49 +413,74 @@ export default function ConfigPage() {
         {servicosPT.length === 0
           ? <p className="text-sm text-gray-400 py-2">Nenhum serviço configurado. Clica em "+ Serviço" para adicionar.</p>
           : (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50">
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Nome do serviço</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-40">Horas / semana</th>
-                    <th className="px-4 py-3 w-36"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {servicosPT.map((sv, i) => (
-                    <tr key={sv.id || `new-${i}`}>
-                      <td className="px-4 py-3">
-                        <input value={sv.nome} placeholder="ex: PT 2x semana"
-                          onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], nome: e.target.value }; setServicosPT(c) }}
-                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <input type="number" step="0.5" min="0" value={sv.horas_semanais}
-                            onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], horas_semanais: Number(e.target.value) }; setServicosPT(c) }}
-                            className="w-20 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                          <span className="text-sm text-gray-500">h/sem</span>
+            <div className="space-y-2">
+              {servicosPT.map((sv, i) => (
+                <div key={sv.id || `new-${i}`} className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 space-y-2.5">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Nome</label>
+                      <input value={sv.nome} placeholder="ex: PT 2x/sem 60min"
+                        onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], nome: e.target.value }; setServicosPT(c) }}
+                        className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Tipo</label>
+                      <select value={sv.tipo}
+                        onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], tipo: e.target.value as 'semanal' | 'pack' }; setServicosPT(c) }}
+                        className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="semanal">Semanal</option>
+                        <option value="pack">Pack</option>
+                      </select>
+                    </div>
+                    {sv.tipo === 'semanal' ? (
+                      <>
+                        <div>
+                          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Sessões / semana</label>
+                          <input type="number" step="0.5" min="0.5" value={sv.sessoes_semana ?? ''}
+                            onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], sessoes_semana: Number(e.target.value) }; setServicosPT(c) }}
+                            className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1.5 justify-end">
-                          <button onClick={() => salvarServicoPT(sv)} disabled={saving || !sv.nome}
-                            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                            Guardar
-                          </button>
-                          {sv.id > 0 && (
-                            <button onClick={() => eliminarServicoPT(sv.id)} disabled={saving}
-                              className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors">
-                              Eliminar
-                            </button>
-                          )}
+                        <div>
+                          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Duração (min)</label>
+                          <select value={sv.duracao_min ?? 60}
+                            onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], duracao_min: Number(e.target.value) }; setServicosPT(c) }}
+                            className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value={30}>30 min</option>
+                            <option value={45}>45 min</option>
+                            <option value={60}>60 min</option>
+                          </select>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </>
+                    ) : (
+                      <div className="col-span-2">
+                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Horas do pack</label>
+                        <input type="number" step="0.5" min="0" value={sv.horas_mensais || ''}
+                          onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], horas_mensais: Number(e.target.value) }; setServicosPT(c) }}
+                          className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-blue-700">
+                      {sv.tipo === 'semanal'
+                        ? `= ${calcHorasMensais(sv)} h/mês`
+                        : `${sv.horas_mensais} h total`}
+                    </p>
+                    <div className="flex gap-1.5">
+                      <button onClick={() => salvarServicoPT(sv)} disabled={saving || !sv.nome}
+                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                        Guardar
+                      </button>
+                      {sv.id > 0 && (
+                        <button onClick={() => eliminarServicoPT(sv.id)} disabled={saving}
+                          className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors">
+                          Eliminar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
       </section>
