@@ -66,12 +66,38 @@ export default function ConfigPage() {
     setSaving(false); ok()
   }
 
+  const [novoTipo, setNovoTipo] = useState(false)
+  const [formTipo, setFormTipo] = useState<Partial<TipoSessaoRow> & { _novo?: boolean }>({
+    id: '', nome: '', categoria: 'avaliacao', duracao_min: 60, valor_fixo: null, conta_para_nivel: false,
+  })
+
   async function salvarTiposSessao() {
     setSaving(true)
-    for (const t of tiposSessao.filter(t => t.categoria === 'avaliacao')) {
-      await supabase.from('tipos_sessao').update({ valor_fixo: t.valor_fixo }).eq('id', t.id)
+    for (const t of tiposSessao.filter(t => !(t as TipoSessaoRow & { _novo?: boolean })._novo)) {
+      await supabase.from('tipos_sessao').update({
+        nome: t.nome, valor_fixo: t.valor_fixo, duracao_min: t.duracao_min, conta_para_nivel: t.conta_para_nivel,
+      }).eq('id', t.id)
     }
-    setSaving(false); ok()
+    setSaving(false); ok(); load()
+  }
+
+  async function criarTipo() {
+    if (!formTipo.id || !formTipo.nome) return
+    setSaving(true)
+    await supabase.from('tipos_sessao').insert({
+      id: formTipo.id, nome: formTipo.nome, categoria: formTipo.categoria,
+      duracao_min: formTipo.duracao_min, valor_fixo: formTipo.valor_fixo ?? null,
+      conta_para_nivel: formTipo.conta_para_nivel ?? false,
+    })
+    setNovoTipo(false)
+    setFormTipo({ id: '', nome: '', categoria: 'avaliacao', duracao_min: 60, valor_fixo: null, conta_para_nivel: false })
+    setSaving(false); ok(); load()
+  }
+
+  async function eliminarTipo(id: string) {
+    setSaving(true)
+    await supabase.from('tipos_sessao').delete().eq('id', id)
+    setSaving(false); ok(); load()
   }
 
   async function salvarFiscal() {
@@ -136,7 +162,7 @@ export default function ConfigPage() {
     }, ...ss])
   }
 
-  const avaliacao = tiposSessao.filter(t => t.categoria === 'avaliacao')
+  const TIPOS_BASE = ['rep', 'oi', 'treino_oferta', 'treino_60', 'treino_45']
 
   if (loading) return <p className="text-sm text-gray-500">A carregar...</p>
 
@@ -145,36 +171,120 @@ export default function ConfigPage() {
       <h1 className="text-xl font-bold">Configurações</h1>
       {msg && <div className="bg-green-50 border border-green-200 text-green-800 text-sm rounded-lg px-3 py-2">{msg}</div>}
 
-      {/* VALORES DAS AVALIAÇÕES */}
+      {/* TIPOS DE SESSÃO / FOLHA DE VENCIMENTO */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold">Valor das avaliações</h2>
-          <button onClick={salvarTiposSessao} disabled={saving}
-            className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
-            Guardar
-          </button>
+          <div>
+            <h2 className="text-base font-semibold">Folha de vencimento — códigos</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Valor fixo para avaliações; treinos usam a tabela de níveis abaixo.</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={salvarTiposSessao} disabled={saving}
+              className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+              Guardar alterações
+            </button>
+            <button onClick={() => setNovoTipo(true)}
+              className="text-sm px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+              + Novo código
+            </button>
+          </div>
         </div>
+
+        {novoTipo && (
+          <div className="bg-white border border-blue-200 rounded-xl p-4 mb-3 space-y-3">
+            <h3 className="text-sm font-semibold">Novo código</h3>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Código (ID único)</label>
+                <input value={formTipo.id ?? ''} onChange={(e) => setFormTipo({ ...formTipo, id: e.target.value.toLowerCase().replace(/\s/g, '_') })}
+                  placeholder="ex: ginastica_laboral"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Nome</label>
+                <input value={formTipo.nome ?? ''} onChange={(e) => setFormTipo({ ...formTipo, nome: e.target.value })}
+                  placeholder="ex: Ginástica Laboral"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Categoria</label>
+                <select value={formTipo.categoria} onChange={(e) => setFormTipo({ ...formTipo, categoria: e.target.value as 'avaliacao' | 'treino' })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="avaliacao">Avaliação / valor fixo</option>
+                  <option value="treino">Treino / nível</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Duração (min)</label>
+                <input type="number" value={formTipo.duracao_min ?? ''} onChange={(e) => setFormTipo({ ...formTipo, duracao_min: Number(e.target.value) })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Valor fixo (€)</label>
+                <input type="number" step="0.01" value={formTipo.valor_fixo ?? ''} onChange={(e) => setFormTipo({ ...formTipo, valor_fixo: e.target.value ? Number(e.target.value) : null })}
+                  placeholder="—"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div className="flex items-end pb-2">
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input type="checkbox" checked={formTipo.conta_para_nivel ?? false} onChange={(e) => setFormTipo({ ...formTipo, conta_para_nivel: e.target.checked })}
+                    className="rounded" />
+                  Conta para nível de horas
+                </label>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={criarTipo} disabled={saving || !formTipo.id || !formTipo.nome}
+                className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                Criar
+              </button>
+              <button onClick={() => setNovoTipo(false)}
+                className="text-sm px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left px-4 py-2 text-xs font-medium text-gray-600">Tipo</th>
-                <th className="text-left px-4 py-2 text-xs font-medium text-gray-600">Valor (€)</th>
+                <th className="text-left px-4 py-2 text-xs font-medium text-gray-600">Código</th>
+                <th className="text-left px-4 py-2 text-xs font-medium text-gray-600">Nome</th>
+                <th className="text-left px-4 py-2 text-xs font-medium text-gray-600">Dur.</th>
+                <th className="text-left px-4 py-2 text-xs font-medium text-gray-600">Valor fixo (€)</th>
+                <th className="text-left px-4 py-2 text-xs font-medium text-gray-600">Conta horas</th>
+                <th className="px-4 py-2"></th>
               </tr>
             </thead>
             <tbody>
-              {avaliacao.map((t, i) => (
-                <tr key={t.id} className={i < avaliacao.length - 1 ? 'border-b border-gray-100' : ''}>
-                  <td className="px-4 py-2 font-medium">{t.nome}</td>
+              {tiposSessao.map((t, i) => (
+                <tr key={t.id} className={i < tiposSessao.length - 1 ? 'border-b border-gray-100' : ''}>
+                  <td className="px-4 py-2 font-mono text-xs text-gray-600">{t.id}</td>
                   <td className="px-4 py-2">
-                    <input type="number" step="0.01" value={t.valor_fixo ?? ''}
-                      onChange={(e) => {
-                        const copy = [...tiposSessao]
-                        const idx = copy.findIndex(x => x.id === t.id)
-                        copy[idx] = { ...copy[idx], valor_fixo: e.target.value ? Number(e.target.value) : null }
-                        setTiposSessao(copy)
-                      }}
+                    <input value={t.nome}
+                      onChange={(e) => { const c = [...tiposSessao]; c[i] = { ...c[i], nome: e.target.value }; setTiposSessao(c) }}
+                      className="w-full border border-gray-300 rounded px-2 py-0.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td className="px-4 py-2">
+                    <input type="number" value={t.duracao_min ?? ''}
+                      onChange={(e) => { const c = [...tiposSessao]; c[i] = { ...c[i], duracao_min: e.target.value ? Number(e.target.value) : null }; setTiposSessao(c) }}
+                      className="w-16 border border-gray-300 rounded px-2 py-0.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td className="px-4 py-2">
+                    <input type="number" step="0.01" value={t.valor_fixo ?? ''} placeholder="—"
+                      onChange={(e) => { const c = [...tiposSessao]; c[i] = { ...c[i], valor_fixo: e.target.value ? Number(e.target.value) : null }; setTiposSessao(c) }}
                       className="w-24 border border-gray-300 rounded px-2 py-0.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td className="px-4 py-2 text-center">
+                    <input type="checkbox" checked={t.conta_para_nivel}
+                      onChange={(e) => { const c = [...tiposSessao]; c[i] = { ...c[i], conta_para_nivel: e.target.checked }; setTiposSessao(c) }} />
+                  </td>
+                  <td className="px-4 py-2">
+                    {!TIPOS_BASE.includes(t.id) && (
+                      <button onClick={() => eliminarTipo(t.id)} className="text-xs text-red-500 hover:text-red-700">Eliminar</button>
+                    )}
                   </td>
                 </tr>
               ))}
