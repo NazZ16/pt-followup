@@ -35,8 +35,8 @@ export function gerarMensagem(nome: string, tipo: TipoAluno, marco: TipoFollowup
 }
 
 export function gerarMensagemLembrete(nome: string, hora: string | null): string {
-  const horaStr = hora ? ` às ${hora}` : ''
-  return `Olá ${nome}! 👋 Só a lembrar que amanhã${horaStr} tem avaliação comigo. Até amanhã! 💪`
+  const horaStr = hora ? ` pelas ${hora}` : ''
+  return `Olá ${nome}, como está?\nAmanhã estou à sua espera junto ao balcão do fitness${horaStr}.\nObrigado e até amanhã\nÉlsio Mota`
 }
 
 export function gerarLinkWhatsApp(contacto: string, mensagem: string): string {
