@@ -106,13 +106,13 @@ export interface BonusTrimestral {
 
 export interface MesCorrente {
   total_sessoes: number
-  horas_nivel: number
-  bruto_acumulado: number
-  nivel_atual: number
-  nivel_horas_min: number
+  horas_nivel: number | null
+  bruto_acumulado: number | null
+  nivel_atual: number | null
+  nivel_horas_min: number | null
   nivel_horas_max: number | null
   taxa_irs: number
-  irs_estimado: number
+  irs_estimado: number | null
   ss_mensal: number
-  liquido_estimado: number
+  liquido_estimado: number | null
 }
