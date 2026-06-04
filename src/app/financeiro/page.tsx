@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase, Briefing, Sessao, SsTrimestral, BonusTrimestral, EstadoBriefing, Aluno, TipoSessaoRow } from '@/lib/supabase'
+import { supabase, Briefing, Sessao, SsTrimestral, BonusTrimestral, EstadoBriefing, Aluno, TipoSessaoRow, ConfigBonus } from '@/lib/supabase'
 
 function fmt(v: number | null) {
   if (v == null) return '—'
@@ -42,6 +42,7 @@ export default function FinanceiroPage() {
   const [sessoes, setSessoes] = useState<Sessao[]>([])
   const [ss, setSs] = useState<SsTrimestral[]>([])
   const [bonus, setBonus] = useState<BonusTrimestral[]>([])
+  const [configBonus, setConfigBonus] = useState<ConfigBonus[]>([])
   const [alunos, setAlunos] = useState<Aluno[]>([])
   const [tiposSessao, setTiposSessao] = useState<TipoSessaoRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,7 +57,7 @@ export default function FinanceiroPage() {
 
   async function load() {
     setLoading(true)
-    const [{ data: br }, { data: se }, { data: ssd }, { data: bon }, { data: cf }, { data: ssAtual }, { data: al }, { data: ts }] = await Promise.all([
+    const [{ data: br }, { data: se }, { data: ssd }, { data: bon }, { data: cf }, { data: ssAtual }, { data: al }, { data: ts }, { data: cb }] = await Promise.all([
       supabase.from('briefings').select('*').order('id', { ascending: false }),
       supabase.from('sessoes').select('*').order('data_sessao', { ascending: false }),
       supabase.from('ss_trimestral').select('*').order('ano_referencia', { ascending: false }),
@@ -65,6 +66,7 @@ export default function FinanceiroPage() {
       supabase.from('ss_trimestral').select('*').order('ano_referencia', { ascending: false }).limit(1).maybeSingle(),
       supabase.from('alunos').select('*').order('nome'),
       supabase.from('tipos_sessao').select('*').order('id'),
+      supabase.from('config_bonus').select('*').order('horas_threshold'),
     ])
     setBriefings((br as Briefing[]) || [])
     setSessoes((se as Sessao[]) || [])
@@ -72,6 +74,7 @@ export default function FinanceiroPage() {
     setBonus((bon as BonusTrimestral[]) || [])
     setAlunos((al as Aluno[]) || [])
     setTiposSessao((ts as TipoSessaoRow[]) || [])
+    setConfigBonus((cb as ConfigBonus[]) || [])
     if (cf) setTaxaIrs((cf as { taxa_irs: number }).taxa_irs)
     if (ssAtual) setSsMensal((ssAtual as SsTrimestral).contribuicao_mensal)
     setLoading(false)
@@ -97,21 +100,39 @@ export default function FinanceiroPage() {
       const irs = bruto * taxaIrs
       const liquido = bruto - irs - ssMensal
       const trim = Math.ceil(briefing.mes / 3)
-      const bonusTrim = bonus.find(b => b.ano === briefing.ano && b.trimestre === trim)
-      if (bonusTrim) {
+      // Último mês do trimestre (3, 6, 9, 12) — calcular bónus automaticamente
+      if (briefing.mes % 3 === 0 && configBonus.length > 0) {
         const sessTrimestre = sessoes.filter(s => {
           if (!s.mes_briefing || !s.conta_horas || s.estado !== 'realizada') return false
           const [a, m] = s.mes_briefing.split('-').map(Number)
           return a === briefing.ano && Math.ceil(m / 3) === trim
         })
-        const horasTrim = sessTrimestre.reduce((acc, s) => {
+        const horasTrim = Math.round(sessTrimestre.reduce((acc, s) => {
           const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
           return acc + (tipo?.duracao_min ?? 0) / 60
-        }, 0)
-        await supabase.from('bonus_trimestral').update({
-          horas_realizadas: Math.round(horasTrim * 100) / 100,
-          atingido: horasTrim >= bonusTrim.horas_threshold,
-        }).eq('id', bonusTrim.id)
+        }, 0) * 100) / 100
+        // Regra com maior threshold atingido
+        const regraAtingida = [...configBonus]
+          .sort((a, b) => b.horas_threshold - a.horas_threshold)
+          .find(cb => horasTrim >= cb.horas_threshold)
+        const existente = bonus.find(b => b.ano === briefing.ano && b.trimestre === trim)
+        if (existente) {
+          await supabase.from('bonus_trimestral').update({
+            horas_realizadas: horasTrim,
+            horas_threshold: regraAtingida?.horas_threshold ?? existente.horas_threshold,
+            valor_bonus: regraAtingida?.valor_bonus ?? existente.valor_bonus,
+            atingido: !!regraAtingida,
+          }).eq('id', existente.id)
+        } else {
+          const melhorRegra = regraAtingida ?? configBonus[0]
+          await supabase.from('bonus_trimestral').insert({
+            ano: briefing.ano, trimestre: trim,
+            horas_threshold: melhorRegra.horas_threshold,
+            valor_bonus: melhorRegra.valor_bonus,
+            horas_realizadas: horasTrim,
+            atingido: !!regraAtingida,
+          })
+        }
       }
       await supabase.from('briefings').update({
         estado: seguinte, total_bruto: bruto, irs_retido: irs,
@@ -195,6 +216,25 @@ export default function FinanceiroPage() {
     load()
   }
 
+  // Progresso bónus trimestre atual
+  const hoje = new Date()
+  const trimAtual = Math.ceil((hoje.getMonth() + 1) / 3)
+  const anoAtual = hoje.getFullYear()
+  const mesInicio = (trimAtual - 1) * 3 + 1
+  const mesesTrim = [mesInicio, mesInicio + 1, mesInicio + 2].map(m => `${anoAtual}-${String(m).padStart(2, '0')}`)
+  const horasTrimAtual = Math.round(sessoes.filter(s =>
+    s.mes_briefing && mesesTrim.includes(s.mes_briefing) && s.conta_horas && s.estado === 'realizada'
+  ).reduce((acc, s) => {
+    const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
+    return acc + (tipo?.duracao_min ?? 0) / 60
+  }, 0) * 10) / 10
+  const melhorRegraAtingida = [...configBonus]
+    .sort((a, b) => b.horas_threshold - a.horas_threshold)
+    .find(cb => horasTrimAtual >= cb.horas_threshold)
+  const proximaRegra = [...configBonus]
+    .sort((a, b) => a.horas_threshold - b.horas_threshold)
+    .find(cb => horasTrimAtual < cb.horas_threshold)
+
   const sessoesByMes = sessoes.reduce<Record<string, Sessao[]>>((acc, s) => {
     if (!s.mes_briefing) return acc
     if (!acc[s.mes_briefing]) acc[s.mes_briefing] = []
@@ -275,6 +315,42 @@ export default function FinanceiroPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* BÓNUS TRIMESTRE ATUAL */}
+      {configBonus.length > 0 && (
+        <section className="space-y-2">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">🏆 Bónus — T{trimAtual} {anoAtual}</p>
+          <div className={`bg-white rounded-xl shadow-sm border p-3 space-y-2 ${melhorRegraAtingida ? 'border-emerald-200' : 'border-gray-100'}`}>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-gray-900">{horasTrimAtual}h realizadas este trimestre</span>
+              {melhorRegraAtingida
+                ? <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-emerald-100 text-emerald-700">✓ Bónus de {melhorRegraAtingida.valor_bonus.toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' })} atingido</span>
+                : proximaRegra
+                  ? <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-amber-100 text-amber-700">Faltam {(proximaRegra.horas_threshold - horasTrimAtual).toFixed(1)}h para {proximaRegra.valor_bonus.toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' })}</span>
+                  : null
+              }
+            </div>
+            {proximaRegra && (
+              <div className="w-full bg-gray-100 rounded-full h-2">
+                <div
+                  className={`h-2 rounded-full transition-all ${melhorRegraAtingida ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                  style={{ width: `${Math.min(100, (horasTrimAtual / proximaRegra.horas_threshold) * 100)}%` }}
+                />
+              </div>
+            )}
+            <div className="flex gap-4">
+              {configBonus.map(cb => (
+                <div key={cb.id} className="text-xs text-gray-500">
+                  <span className={horasTrimAtual >= cb.horas_threshold ? 'text-emerald-600 font-semibold' : ''}>
+                    {cb.horas_threshold}h → {cb.valor_bonus.toLocaleString('pt-PT', { style: 'currency', currency: 'EUR' })}
+                    {horasTrimAtual >= cb.horas_threshold ? ' ✓' : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
       )}
 
       {/* BRIEFINGS */}

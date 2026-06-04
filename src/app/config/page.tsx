@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase, NivelRemuneracao, TipoSessaoRow, ConfigFiscal, BonusTrimestral, SsTrimestral } from '@/lib/supabase'
+import { supabase, NivelRemuneracao, TipoSessaoRow, ConfigFiscal, BonusTrimestral, SsTrimestral, ConfigBonus } from '@/lib/supabase'
 
 export default function ConfigPage() {
   const [niveis, setNiveis] = useState<NivelRemuneracao[]>([])
   const [tiposSessao, setTiposSessao] = useState<TipoSessaoRow[]>([])
   const [fiscal, setFiscal] = useState<ConfigFiscal | null>(null)
   const [bonus, setBonus] = useState<BonusTrimestral[]>([])
+  const [configBonus, setConfigBonus] = useState<ConfigBonus[]>([])
   const [ss, setSs] = useState<SsTrimestral[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -18,18 +19,20 @@ export default function ConfigPage() {
 
   async function load() {
     setLoading(true)
-    const [{ data: n }, { data: ts }, { data: f }, { data: b }, { data: s }] = await Promise.all([
+    const [{ data: n }, { data: ts }, { data: f }, { data: b }, { data: s }, { data: cb }] = await Promise.all([
       supabase.from('niveis_remuneracao').select('*').order('nivel'),
       supabase.from('tipos_sessao').select('*').order('id'),
       supabase.from('config_fiscal').select('*').order('vigente_desde', { ascending: false }).limit(1).single(),
       supabase.from('bonus_trimestral').select('*').order('ano', { ascending: false }),
       supabase.from('ss_trimestral').select('*').order('ano_referencia', { ascending: false }),
+      supabase.from('config_bonus').select('*').order('horas_threshold'),
     ])
     setNiveis((n as NivelRemuneracao[]) || [])
     setTiposSessao((ts as TipoSessaoRow[]) || [])
     setFiscal(f as ConfigFiscal | null)
     setBonus((b as BonusTrimestral[]) || [])
     setSs((s as SsTrimestral[]) || [])
+    setConfigBonus((cb as ConfigBonus[]) || [])
     setLoading(false)
   }
 
@@ -108,23 +111,31 @@ export default function ConfigPage() {
     if (error) fail(error.message); else ok()
   }
 
-  async function salvarBonus(b: BonusTrimestral, i: number) {
+  async function salvarConfigBonus(cb: ConfigBonus) {
     setSaving(true)
     let error = null
-    if (b.id) {
-      ({ error } = await supabase.from('bonus_trimestral').update({
-        horas_threshold: b.horas_threshold, valor_bonus: b.valor_bonus,
-      }).eq('id', b.id))
+    if (cb.id) {
+      ({ error } = await supabase.from('config_bonus').update({
+        horas_threshold: cb.horas_threshold, valor_bonus: cb.valor_bonus,
+      }).eq('id', cb.id))
     } else {
-      ({ error } = await supabase.from('bonus_trimestral').insert({
-        ano: b.ano, trimestre: b.trimestre,
-        horas_threshold: b.horas_threshold, valor_bonus: b.valor_bonus,
-        horas_realizadas: 0, atingido: false,
+      ({ error } = await supabase.from('config_bonus').insert({
+        horas_threshold: cb.horas_threshold, valor_bonus: cb.valor_bonus,
       }))
     }
     setSaving(false)
     if (error) fail(error.message); else { ok(); load() }
-    void i
+  }
+
+  async function eliminarConfigBonus(id: number) {
+    setSaving(true)
+    const { error } = await supabase.from('config_bonus').delete().eq('id', id)
+    setSaving(false)
+    if (error) fail(error.message); else { ok(); load() }
+  }
+
+  function addConfigBonus() {
+    setConfigBonus([...configBonus, { id: 0, horas_threshold: 0, valor_bonus: 0 }])
   }
 
   async function salvarSs(s: SsTrimestral) {
@@ -144,11 +155,6 @@ export default function ConfigPage() {
     }
     setSaving(false)
     if (error) fail(error.message); else { ok(); load() }
-  }
-
-  function addBonus() {
-    const hoje = new Date()
-    setBonus([...bonus, { id: 0, ano: hoje.getFullYear(), trimestre: Math.ceil((hoje.getMonth() + 1) / 3), horas_threshold: 0, valor_bonus: 0, horas_realizadas: 0, atingido: false, recebido: false, data_recebimento: null }])
   }
 
   function addSs() {
@@ -460,50 +466,64 @@ export default function ConfigPage() {
       {/* BÓNUS */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-base text-gray-800">Bónus trimestral</h2>
-          <button onClick={addBonus}
+          <div>
+            <h2 className="font-semibold text-base text-gray-800">Regras de bónus trimestral</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Define as horas mínimas e o valor. A app calcula automaticamente se atingiste o bónus em cada trimestre.</p>
+          </div>
+          <button onClick={addConfigBonus}
             className="px-3 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-200 transition-colors">
-            + Trimestre
+            + Regra
           </button>
         </div>
-        {bonus.length === 0
-          ? <p className="text-sm text-gray-400 py-2">Nenhum bónus configurado.</p>
+        {configBonus.length === 0
+          ? <p className="text-sm text-gray-400 py-2">Nenhuma regra configurada. Clica em "+ Regra" para adicionar.</p>
           : (
-            <div className="space-y-2">
-              {bonus.map((b, i) => (
-                <div key={b.id || i} className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 space-y-3">
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Trimestre</label>
-                      <input type="number" min="1" max="4" value={b.trimestre}
-                        onChange={(e) => { const c = [...bonus]; c[i] = { ...c[i], trimestre: Number(e.target.value) }; setBonus(c) }}
-                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Ano</label>
-                      <input type="number" value={b.ano}
-                        onChange={(e) => { const c = [...bonus]; c[i] = { ...c[i], ano: Number(e.target.value) }; setBonus(c) }}
-                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Horas mínimas</label>
-                      <input type="number" value={b.horas_threshold}
-                        onChange={(e) => { const c = [...bonus]; c[i] = { ...c[i], horas_threshold: Number(e.target.value) }; setBonus(c) }}
-                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Valor bónus (€)</label>
-                      <input type="number" step="0.01" value={b.valor_bonus}
-                        onChange={(e) => { const c = [...bonus]; c[i] = { ...c[i], valor_bonus: Number(e.target.value) }; setBonus(c) }}
-                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                  </div>
-                  <button onClick={() => salvarBonus(b, i)} disabled={saving}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                    Guardar
-                  </button>
-                </div>
-              ))}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Horas mínimas / trimestre</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Valor do bónus (€)</th>
+                    <th className="px-4 py-3 w-36"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {configBonus.map((cb, i) => (
+                    <tr key={cb.id || `new-${i}`}>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <input type="number" min="0" value={cb.horas_threshold}
+                            onChange={(e) => { const c = [...configBonus]; c[i] = { ...c[i], horas_threshold: Number(e.target.value) }; setConfigBonus(c) }}
+                            className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                          <span className="text-sm text-gray-500">horas</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <input type="number" step="0.01" min="0" value={cb.valor_bonus}
+                            onChange={(e) => { const c = [...configBonus]; c[i] = { ...c[i], valor_bonus: Number(e.target.value) }; setConfigBonus(c) }}
+                            className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                          <span className="text-sm text-gray-500">€</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1.5 justify-end">
+                          <button onClick={() => salvarConfigBonus(cb)} disabled={saving}
+                            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                            Guardar
+                          </button>
+                          {cb.id > 0 && (
+                            <button onClick={() => eliminarConfigBonus(cb.id)} disabled={saving}
+                              className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors">
+                              Eliminar
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
       </section>
