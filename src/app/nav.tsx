@@ -16,7 +16,7 @@ export default function Nav() {
     <>
       {/* Desktop top nav */}
       <nav className="hidden sm:block bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-3xl mx-auto px-4 flex items-center gap-1 h-14">
+        <div className="max-w-5xl mx-auto px-4 flex items-center gap-1 h-14">
           <span className="font-bold text-base mr-5 text-blue-600 tracking-tight">PT Follow-up</span>
           {links.map((l) => (
             <Link
