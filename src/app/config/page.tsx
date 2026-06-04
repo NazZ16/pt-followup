@@ -170,7 +170,7 @@ export default function ConfigPage() {
   )
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <h1 className="text-2xl font-bold text-gray-900">Configurações</h1>
 
       {msg && <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm rounded-xl px-4 py-3">{msg}</div>}
@@ -190,7 +190,7 @@ export default function ConfigPage() {
         </div>
 
         {novoTipo && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-3">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 space-y-3">
             <p className="font-semibold text-sm">Novo código</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -244,7 +244,7 @@ export default function ConfigPage() {
           </div>
         )}
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
@@ -310,7 +310,7 @@ export default function ConfigPage() {
           <h2 className="font-semibold text-base text-gray-800">Níveis de remuneração</h2>
           <p className="text-xs text-gray-500 mt-0.5">Valor de treino_45 e treino_60 é determinado pelo nível em que estás no mês · edita e clica Guardar</p>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
@@ -363,8 +363,8 @@ export default function ConfigPage() {
       <section className="space-y-3">
         <h2 className="font-semibold text-base text-gray-800">Configuração fiscal</h2>
         {fiscal && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-4">
-            <div className="flex items-center gap-4">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 space-y-4">
+            <div className="flex items-center gap-3">
               <div className="flex-1">
                 <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Taxa IRS — retenção na fonte</label>
                 <div className="flex items-center gap-3">
@@ -409,7 +409,7 @@ export default function ConfigPage() {
           : (
             <div className="space-y-2">
               {ss.map((s, i) => (
-                <div key={s.id || i} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-3">
+                <div key={s.id || i} className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 space-y-3">
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <div>
                       <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Trimestre ref.</label>
@@ -471,7 +471,7 @@ export default function ConfigPage() {
           : (
             <div className="space-y-2">
               {bonus.map((b, i) => (
-                <div key={b.id || i} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-3">
+                <div key={b.id || i} className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 space-y-3">
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <div>
                       <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Trimestre</label>
