@@ -120,6 +120,12 @@ export interface SsTrimestral {
   trimestre_aplicacao: number
 }
 
+export interface ConfigBonus {
+  id: number
+  horas_threshold: number
+  valor_bonus: number
+}
+
 export interface BonusTrimestral {
   id: number
   ano: number
