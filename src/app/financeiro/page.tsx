@@ -72,7 +72,53 @@ export default function FinanceiroPage() {
   async function avancarEstado(briefing: Briefing) {
     const seguinte = ESTADOS_SEGUINTES[briefing.estado]
     if (!seguinte) return
-    await supabase.from('briefings').update({ estado: seguinte }).eq('id', briefing.id)
+    // Ao fechar: recalcula totais a partir das sessões reais
+    if (briefing.estado === 'aberto') {
+      const sessoesDoMes = sessoes.filter(s => s.mes_briefing === briefing.id && s.estado === 'realizada')
+      const bruto = sessoesDoMes.reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0)
+      const horas = sessoesDoMes.filter(s => s.conta_horas).reduce((acc, s) => {
+        const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
+        return acc + (tipo?.duracao_min ?? 0) / 60
+      }, 0)
+      const irs = bruto * taxaIrs
+      const liquido = bruto - irs - ssMensal
+      // Actualiza horas do bónus trimestral
+      const trim = Math.ceil(briefing.mes / 3)
+      const bonusTrim = bonus.find(b => b.ano === briefing.ano && b.trimestre === trim)
+      if (bonusTrim) {
+        const sessTrimestre = sessoes.filter(s => {
+          if (!s.mes_briefing || !s.conta_horas || s.estado !== 'realizada') return false
+          const [a, m] = s.mes_briefing.split('-').map(Number)
+          return a === briefing.ano && Math.ceil(m / 3) === trim
+        })
+        const horasTrim = sessTrimestre.reduce((acc, s) => {
+          const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
+          return acc + (tipo?.duracao_min ?? 0) / 60
+        }, 0)
+        await supabase.from('bonus_trimestral').update({
+          horas_realizadas: Math.round(horasTrim * 100) / 100,
+          atingido: horasTrim >= bonusTrim.horas_threshold,
+        }).eq('id', bonusTrim.id)
+      }
+      await supabase.from('briefings').update({
+        estado: seguinte, total_bruto: bruto, irs_retido: irs,
+        ss_pagar: ssMensal, liquido, horas_contadas: Math.round(horas * 100) / 100,
+        data_fecho: new Date().toISOString().slice(0, 10),
+      }).eq('id', briefing.id)
+    } else {
+      await supabase.from('briefings').update({ estado: seguinte }).eq('id', briefing.id)
+    }
+    load()
+  }
+
+  async function eliminarSessao(id: string) {
+    await supabase.from('sessoes').delete().eq('id', id)
+    load()
+  }
+
+  async function toggleEstadoSessao(sessao: Sessao) {
+    const novoEstado = sessao.estado === 'realizada' ? 'nao_realizada' : 'realizada'
+    await supabase.from('sessoes').update({ estado: novoEstado }).eq('id', sessao.id)
     load()
   }
 
@@ -104,7 +150,24 @@ export default function FinanceiroPage() {
     }
 
     const contaHoras = !!aluno?.convertido && tipo?.conta_para_nivel === true
-    const valorCalculado = tipo?.categoria === 'avaliacao' ? (tipo.valor_fixo ?? 0) : null
+
+    // Calcular valor: fixo para avaliações, nível para treinos
+    let valorCalculado: number | null = null
+    if (tipo?.categoria === 'avaliacao') {
+      valorCalculado = tipo.valor_fixo ?? 0
+    } else if (tipo?.categoria === 'treino' && aluno?.convertido) {
+      // Horas do mês até agora (para determinar nível)
+      const { data: niveis } = await supabase.from('niveis_remuneracao').select('*').order('horas_min')
+      const sessoesDoMes = sessoes.filter(s => s.mes_briefing === mesBriefing && s.conta_horas && s.estado === 'realizada')
+      const horasMes = sessoesDoMes.reduce((acc, s) => {
+        const t = tiposSessao.find(x => x.id === s.tipo_sessao_id)
+        return acc + (t?.duracao_min ?? 0) / 60
+      }, 0) + (tipo.duracao_min ?? 0) / 60
+      const nivel = ((niveis || []) as { horas_min: number; horas_max: number | null; valor_45min: number; valor_60min: number }[])
+        .filter(n => horasMes >= n.horas_min && (n.horas_max == null || horasMes < n.horas_max))
+        .pop()
+      if (nivel) valorCalculado = tipo.duracao_min === 45 ? nivel.valor_45min : nivel.valor_60min
+    }
 
     await supabase.from('sessoes').insert({
       num_socio: formSessao.num_socio,
@@ -227,12 +290,23 @@ export default function FinanceiroPage() {
                     <div className="mt-2 space-y-1">
                       {(sessoesByMes[b.id] || []).length === 0
                         ? <p className="text-xs text-gray-500">Sem sessões registadas.</p>
-                        : (sessoesByMes[b.id] || []).map((s) => (
-                          <div key={s.id} className="flex justify-between text-xs text-gray-600 bg-gray-50 rounded px-2 py-1">
-                            <span>{s.data_sessao} · {s.tipo_sessao_id}{s.conta_horas ? ' · ⏱' : ''}</span>
-                            <span className="font-medium">{fmt(s.valor_calculado)}</span>
-                          </div>
-                        ))
+                        : (sessoesByMes[b.id] || []).map((s) => {
+                          const naoRealizada = s.estado !== 'realizada'
+                          return (
+                            <div key={s.id} className={`flex items-center gap-2 text-xs rounded px-2 py-1 ${naoRealizada ? 'bg-red-50 text-gray-400 line-through' : 'bg-gray-50 text-gray-600'}`}>
+                              <span className="flex-1">{s.data_sessao} · {tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id}{s.conta_horas ? ' ⏱' : ''}</span>
+                              <span className="font-medium">{fmt(s.valor_calculado)}</span>
+                              <button onClick={() => toggleEstadoSessao(s)} title={naoRealizada ? 'Marcar realizada' : 'Marcar não realizada'}
+                                className="text-gray-400 hover:text-yellow-600 transition-colors">
+                                {naoRealizada ? '↩' : '✕'}
+                              </button>
+                              <button onClick={() => eliminarSessao(s.id)} title="Eliminar"
+                                className="text-gray-400 hover:text-red-600 transition-colors">
+                                🗑
+                              </button>
+                            </div>
+                          )
+                        })
                       }
                     </div>
                   )}
