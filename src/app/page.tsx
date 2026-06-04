@@ -4,18 +4,14 @@ import { useEffect, useState } from 'react'
 import { supabase, TarefaHoje, MesCorrente, Aluno } from '@/lib/supabase'
 import { gerarMensagem, gerarLinkWhatsApp } from '@/lib/whatsapp'
 
-const URGENCIA_ORDER = ['atrasada', 'hoje', 'esta_semana', 'futura'] as const
-const URGENCIA_LABEL: Record<string, string> = {
-  atrasada: 'Atrasada',
-  hoje: 'Hoje',
-  esta_semana: 'Esta semana',
-  futura: 'Futura',
-}
 const URGENCIA_COLOR: Record<string, string> = {
   atrasada: 'bg-red-100 text-red-800',
   hoje: 'bg-yellow-100 text-yellow-800',
   esta_semana: 'bg-blue-100 text-blue-800',
   futura: 'bg-gray-100 text-gray-700',
+}
+const URGENCIA_LABEL: Record<string, string> = {
+  atrasada: 'Atrasada', hoje: 'Hoje', esta_semana: 'Esta semana', futura: 'Futura',
 }
 const MARCO_LABEL: Record<string, string> = { d7: 'D+7', d30: 'D+30', d60: 'D+60', d120: 'D+120' }
 
@@ -30,48 +26,35 @@ export default function BriefingPage() {
   const [briefingAberto, setBriefingAberto] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    loadAll()
-  }, [])
+  useEffect(() => { loadAll() }, [])
 
   async function loadAll() {
     setLoading(true)
+    const cutoff = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10)
+
     const [{ data: t }, { data: m }, { data: a }, { data: b }] = await Promise.all([
       supabase.from('v_tarefas_hoje').select('*').order('data_prevista'),
-      supabase.from('v_mes_corrente').select('*').single(),
-      supabase
-        .from('alunos')
-        .select('*')
-        .eq('plano_confirmado', false)
-        .lt('data_avaliacao', new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10)),
+      supabase.from('v_mes_corrente').select('*').maybeSingle(),
+      supabase.from('alunos').select('*').is('plano_confirmado_em', null).lt('ultima_avaliacao', cutoff),
       supabase.from('briefings').select('*').eq('estado', 'aberto'),
     ])
+
     setTarefas((t as TarefaHoje[]) || [])
     setMes(m as MesCorrente | null)
     setSemPlano((a as Aluno[]) || [])
-    const hoje = new Date()
-    setBriefingAberto(!!b?.length && hoje.getDate() > 5)
+    setBriefingAberto(!!b?.length && new Date().getDate() > 5)
     setLoading(false)
   }
 
   async function marcarFeita(tarefa: TarefaHoje) {
-    await supabase
-      .from('tarefas_followup')
-      .update({ estado: 'realizado' })
-      .eq('id', tarefa.id)
-    if (tarefa.calendar_event_id) {
-      // event deletion handled by apps script webhook
-    }
+    await supabase.from('tarefas_followup').update({ estado: 'realizado', feito_em: new Date().toISOString() }).eq('id', tarefa.id)
     loadAll()
   }
 
   async function adiar(tarefa: TarefaHoje) {
     const nova = new Date(tarefa.data_prevista)
     nova.setDate(nova.getDate() + 7)
-    await supabase
-      .from('tarefas_followup')
-      .update({ estado: 'adiado', data_prevista: nova.toISOString().slice(0, 10) })
-      .eq('id', tarefa.id)
+    await supabase.from('tarefas_followup').update({ estado: 'adiado', data_prevista: nova.toISOString().slice(0, 10) }).eq('id', tarefa.id)
     loadAll()
   }
 
@@ -85,7 +68,6 @@ export default function BriefingPage() {
     <div className="space-y-8">
       <h1 className="text-xl font-bold">Briefing diário</h1>
 
-      {/* ATENÇÃO */}
       {(atrasadas.length > 0 || semPlano.length > 0 || briefingAberto) && (
         <section>
           <h2 className="text-base font-semibold text-red-700 mb-3">⚠️ Atenção</h2>
@@ -109,58 +91,30 @@ export default function BriefingPage() {
         </section>
       )}
 
-      {/* HOJE */}
       <section>
         <h2 className="text-base font-semibold mb-3">📅 Hoje</h2>
-        {hoje.length === 0 ? (
-          <p className="text-sm text-gray-500">Nenhum follow-up para hoje.</p>
-        ) : (
-          <div className="space-y-2">
-            {hoje.map((t) => (
-              <TarefaCard key={t.id} tarefa={t} onFeita={marcarFeita} onAdiar={adiar} />
-            ))}
-          </div>
-        )}
+        {hoje.length === 0
+          ? <p className="text-sm text-gray-500">Nenhum follow-up para hoje.</p>
+          : <div className="space-y-2">{hoje.map((t) => <TarefaCard key={t.id} tarefa={t} onFeita={marcarFeita} onAdiar={adiar} />)}</div>
+        }
       </section>
 
-      {/* ESTA SEMANA */}
       <section>
         <h2 className="text-base font-semibold mb-3">📆 Esta semana</h2>
-        {semana.length === 0 ? (
-          <p className="text-sm text-gray-500">Sem follow-ups esta semana.</p>
-        ) : (
-          <div className="space-y-2">
-            {semana.map((t) => (
-              <TarefaCard key={t.id} tarefa={t} onFeita={marcarFeita} onAdiar={adiar} />
-            ))}
-          </div>
-        )}
+        {semana.length === 0
+          ? <p className="text-sm text-gray-500">Sem follow-ups esta semana.</p>
+          : <div className="space-y-2">{semana.map((t) => <TarefaCard key={t.id} tarefa={t} onFeita={marcarFeita} onAdiar={adiar} />)}</div>
+        }
       </section>
 
-      {/* MÊS EM CURSO */}
       {mes && (
         <section>
           <h2 className="text-base font-semibold mb-3">💰 Mês em curso</h2>
           <div className="bg-white rounded-xl border border-gray-200 p-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Stat label="Bruto acumulado" value={fmt(mes.bruto_acumulado)} />
-            <Stat label="Nível de horas" value={`Nível ${mes.nivel_atual}`} />
-            <Stat label="Horas contadas" value={`${mes.horas_contabilizadas}h`} />
-            <Stat label="Estimativa líquido" value={fmt(mes.estimativa_liquido)} />
-            {mes.bonus_threshold > 0 && (
-              <div className="col-span-2 sm:col-span-4">
-                <p className="text-xs text-gray-500 mb-1">
-                  Bónus trimestral — {mes.horas_contabilizadas}h / {mes.bonus_threshold}h
-                </p>
-                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-green-500 rounded-full transition-all"
-                    style={{
-                      width: `${Math.min(100, (mes.horas_contabilizadas / mes.bonus_threshold) * 100)}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
+            <Stat label="Nível atual" value={`Nível ${mes.nivel_atual}`} />
+            <Stat label="Horas contadas" value={`${mes.horas_nivel}h`} />
+            <Stat label="Líquido estimado" value={fmt(mes.liquido_estimado)} />
           </div>
         </section>
       )}
@@ -168,51 +122,35 @@ export default function BriefingPage() {
   )
 }
 
-function TarefaCard({
-  tarefa,
-  onFeita,
-  onAdiar,
-}: {
-  tarefa: TarefaHoje
-  onFeita: (t: TarefaHoje) => void
-  onAdiar: (t: TarefaHoje) => void
-}) {
-  const mensagem = gerarMensagem(tarefa.aluno_nome, tarefa.aluno_tipo, tarefa.tipo_followup as 'd7' | 'd30' | 'd60' | 'd120')
-  const link = gerarLinkWhatsApp(tarefa.aluno_contacto, mensagem)
+function TarefaCard({ tarefa, onFeita, onAdiar }: { tarefa: TarefaHoje; onFeita: (t: TarefaHoje) => void; onAdiar: (t: TarefaHoje) => void }) {
+  const mensagem = gerarMensagem(tarefa.nome, tarefa.aluno_tipo, tarefa.tipo)
+  const link = gerarLinkWhatsApp(tarefa.contacto, mensagem)
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium text-sm">{tarefa.aluno_nome}</span>
+          <span className="font-medium text-sm">{tarefa.nome}</span>
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${URGENCIA_COLOR[tarefa.urgencia]}`}>
             {URGENCIA_LABEL[tarefa.urgencia]}
           </span>
           <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-            {MARCO_LABEL[tarefa.tipo_followup]}
+            {MARCO_LABEL[tarefa.tipo]}
           </span>
         </div>
         <p className="text-xs text-gray-500 mt-0.5">{tarefa.data_prevista}</p>
       </div>
       <div className="flex gap-2 flex-wrap">
-        <a
-          href={link}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-        >
+        <a href={link} target="_blank" rel="noopener noreferrer"
+          className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
           WhatsApp
         </a>
-        <button
-          onClick={() => onFeita(tarefa)}
-          className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
+        <button onClick={() => onFeita(tarefa)}
+          className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
           Feito
         </button>
-        <button
-          onClick={() => onAdiar(tarefa)}
-          className="text-xs px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
-        >
+        <button onClick={() => onAdiar(tarefa)}
+          className="text-xs px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
           Adiar 7d
         </button>
       </div>
