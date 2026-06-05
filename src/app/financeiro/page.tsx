@@ -114,7 +114,7 @@ export default function FinanceiroPage() {
         // Regra com maior threshold atingido
         const regraAtingida = [...configBonus]
           .sort((a, b) => b.horas_threshold - a.horas_threshold)
-          .find(cb => horasTrim >= cb.horas_threshold)
+          .find(cb => horasTrim >= cb.horas_threshold && (cb.horas_max == null || horasTrim <= cb.horas_max))
         const existente = bonus.find(b => b.ano === briefing.ano && b.trimestre === trim)
         if (existente) {
           await supabase.from('bonus_trimestral').update({
@@ -230,7 +230,7 @@ export default function FinanceiroPage() {
   }, 0) * 10) / 10
   const melhorRegraAtingida = [...configBonus]
     .sort((a, b) => b.horas_threshold - a.horas_threshold)
-    .find(cb => horasTrimAtual >= cb.horas_threshold)
+    .find(cb => horasTrimAtual >= cb.horas_threshold && (cb.horas_max == null || horasTrimAtual <= cb.horas_max))
   const proximaRegra = [...configBonus]
     .sort((a, b) => a.horas_threshold - b.horas_threshold)
     .find(cb => horasTrimAtual < cb.horas_threshold)
