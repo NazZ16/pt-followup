@@ -86,14 +86,14 @@ export default function BriefingPage() {
     for (const aluno of aptivos) {
       const sv = servicosList.find(s => s.nome === aluno.plano_pt)
       if (!nivelAtual) continue
-      if (sv && sv.tipo === 'semanal') {
+      if (sv) {
         const dur = sv.duracao_min ?? 60
         const rate = dur <= 30 ? nivelAtual.valor_30min : dur <= 45 ? nivelAtual.valor_45min : nivelAtual.valor_60min
-        bruto += (sv.sessoes_semana || 1) * 4.33 * rate
-      } else if (sv && sv.tipo === 'pack' && sv.custo) {
-        bruto += sv.custo
+        const sessoes = sv.sessoes_semana || 1
+        const multiplicador = sv.tipo === 'semanal' ? 4.33 : 1
+        bruto += sessoes * multiplicador * rate
       } else {
-        // fallback: horas × valor_60min
+        // sem serviço associado: fallback horas × valor_60min
         bruto += (aluno.horas_pt_mensais || 0) * nivelAtual.valor_60min
       }
     }
