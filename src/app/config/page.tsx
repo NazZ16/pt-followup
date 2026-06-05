@@ -164,8 +164,7 @@ export default function ConfigPage() {
   }
 
   function calcHorasMensais(sv: ServicoPT): number {
-    if (sv.tipo === 'pack') return sv.horas_mensais
-    return Math.round((sv.sessoes_semana ?? 1) * ((sv.duracao_min ?? 60) / 60) * 4.33 * 100) / 100
+    return Math.round((sv.sessoes_semana ?? 1) * ((sv.duracao_min ?? 60) / 60) * (sv.tipo === 'semanal' ? 4.33 : 1) * 100) / 100
   }
 
   async function salvarSs(s: SsTrimestral) {
@@ -421,7 +420,7 @@ export default function ConfigPage() {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Código</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-28">Custo (€)</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Tipo</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-20">Sessões</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-20">Sess./sem (pack: total)</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Duração</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-20">H/mês</th>
                 <th className="px-4 py-3 w-36"></th>
@@ -457,26 +456,19 @@ export default function ConfigPage() {
                     </select>
                   </td>
                   <td className="px-4 py-3">
-                    {sv.tipo === 'semanal' ? (
-                      <input type="number" step="0.5" min="0.5" value={sv.sessoes_semana ?? ''}
-                        onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], sessoes_semana: Number(e.target.value) }; setServicosPT(c) }}
-                        className="w-16 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    ) : <span className="text-gray-300">—</span>}
+                    <input type="number" step="0.5" min="0.5" value={sv.sessoes_semana ?? ''}
+                      placeholder={sv.tipo === 'pack' ? 'nº' : ''}
+                      onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], sessoes_semana: Number(e.target.value) }; setServicosPT(c) }}
+                      className="w-16 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </td>
                   <td className="px-4 py-3">
-                    {sv.tipo === 'semanal' ? (
-                      <select value={sv.duracao_min ?? 60}
-                        onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], duracao_min: Number(e.target.value) }; setServicosPT(c) }}
-                        className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value={30}>30 min</option>
-                        <option value={45}>45 min</option>
-                        <option value={60}>60 min</option>
-                      </select>
-                    ) : (
-                      <input type="number" step="0.5" min="0" value={sv.horas_mensais || ''} placeholder="horas"
-                        onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], horas_mensais: Number(e.target.value) }; setServicosPT(c) }}
-                        className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    )}
+                    <select value={sv.duracao_min ?? 60}
+                      onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], duracao_min: Number(e.target.value) }; setServicosPT(c) }}
+                      className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value={30}>30 min</option>
+                      <option value={45}>45 min</option>
+                      <option value={60}>60 min</option>
+                    </select>
                   </td>
                   <td className="px-4 py-3 font-semibold text-blue-700 whitespace-nowrap">
                     {calcHorasMensais(sv)}h
