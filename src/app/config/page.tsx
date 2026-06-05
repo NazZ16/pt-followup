@@ -409,79 +409,80 @@ export default function ConfigPage() {
             <p className="text-xs text-gray-500 mt-0.5">Semanal: horas calculadas automaticamente (sessões × duração × 4,33). Pack: horas fixas.</p>
           </div>
           <button onClick={addServicoPT}
-            className="px-3 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-200 transition-colors">
+            className="px-4 py-2 bg-gray-800 text-white rounded-xl text-sm font-semibold hover:bg-gray-900 transition-colors shadow-sm">
             + Serviço
           </button>
         </div>
-        {servicosPT.length === 0
-          ? <p className="text-sm text-gray-400 py-2">Nenhum serviço configurado. Clica em "+ Serviço" para adicionar.</p>
-          : (
-            <div className="space-y-2">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Nome</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Código</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-28">Custo (€)</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Tipo</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-20">Sessões</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Duração</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-20">H/mês</th>
+                <th className="px-4 py-3 w-36"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {servicosPT.length === 0 && (
+                <tr><td colSpan={8} className="px-4 py-4 text-sm text-gray-400 text-center">Nenhum serviço. Clica em &quot;+ Serviço&quot; para adicionar.</td></tr>
+              )}
               {servicosPT.map((sv, i) => (
-                <div key={sv.id || `new-${i}`} className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 space-y-2.5">
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <div className="col-span-2 sm:col-span-1">
-                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Nome</label>
-                      <input value={sv.nome} placeholder="ex: PT 2x/sem 60min"
-                        onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], nome: e.target.value }; setServicosPT(c) }}
-                        className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Código</label>
-                      <input value={sv.codigo ?? ''} placeholder="ex: PT2X60"
-                        onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], codigo: e.target.value || null }; setServicosPT(c) }}
-                        className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Custo mensal (€)</label>
-                      <input type="number" step="0.01" min="0" value={sv.custo ?? ''} placeholder="—"
-                        onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], custo: e.target.value ? Number(e.target.value) : null }; setServicosPT(c) }}
-                        className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Tipo</label>
-                      <select value={sv.tipo}
-                        onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], tipo: e.target.value as 'semanal' | 'pack' }; setServicosPT(c) }}
-                        className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="semanal">Semanal</option>
-                        <option value="pack">Pack</option>
-                      </select>
-                    </div>
+                <tr key={sv.id || `new-${i}`}>
+                  <td className="px-4 py-3 min-w-[160px]">
+                    <input value={sv.nome} placeholder="ex: PT 2x/sem 60min"
+                      onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], nome: e.target.value }; setServicosPT(c) }}
+                      className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td className="px-4 py-3">
+                    <input value={sv.codigo ?? ''} placeholder="—"
+                      onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], codigo: e.target.value || null }; setServicosPT(c) }}
+                      className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td className="px-4 py-3">
+                    <input type="number" step="0.01" min="0" value={sv.custo ?? ''} placeholder="—"
+                      onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], custo: e.target.value ? Number(e.target.value) : null }; setServicosPT(c) }}
+                      className="w-24 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td className="px-4 py-3">
+                    <select value={sv.tipo}
+                      onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], tipo: e.target.value as 'semanal' | 'pack' }; setServicosPT(c) }}
+                      className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="semanal">Semanal</option>
+                      <option value="pack">Pack</option>
+                    </select>
+                  </td>
+                  <td className="px-4 py-3">
                     {sv.tipo === 'semanal' ? (
-                      <>
-                        <div>
-                          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Sessões / semana</label>
-                          <input type="number" step="0.5" min="0.5" value={sv.sessoes_semana ?? ''}
-                            onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], sessoes_semana: Number(e.target.value) }; setServicosPT(c) }}
-                            className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Duração (min)</label>
-                          <select value={sv.duracao_min ?? 60}
-                            onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], duracao_min: Number(e.target.value) }; setServicosPT(c) }}
-                            className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value={30}>30 min</option>
-                            <option value={45}>45 min</option>
-                            <option value={60}>60 min</option>
-                          </select>
-                        </div>
-                      </>
+                      <input type="number" step="0.5" min="0.5" value={sv.sessoes_semana ?? ''}
+                        onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], sessoes_semana: Number(e.target.value) }; setServicosPT(c) }}
+                        className="w-16 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    ) : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    {sv.tipo === 'semanal' ? (
+                      <select value={sv.duracao_min ?? 60}
+                        onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], duracao_min: Number(e.target.value) }; setServicosPT(c) }}
+                        className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value={30}>30 min</option>
+                        <option value={45}>45 min</option>
+                        <option value={60}>60 min</option>
+                      </select>
                     ) : (
-                      <div className="col-span-2">
-                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Horas do pack</label>
-                        <input type="number" step="0.5" min="0" value={sv.horas_mensais || ''}
-                          onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], horas_mensais: Number(e.target.value) }; setServicosPT(c) }}
-                          className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                      </div>
+                      <input type="number" step="0.5" min="0" value={sv.horas_mensais || ''} placeholder="horas"
+                        onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], horas_mensais: Number(e.target.value) }; setServicosPT(c) }}
+                        className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     )}
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-blue-700">
-                      {sv.tipo === 'semanal'
-                        ? `= ${calcHorasMensais(sv)} h/mês`
-                        : `${sv.horas_mensais} h total`}
-                    </p>
-                    <div className="flex gap-1.5">
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-blue-700 whitespace-nowrap">
+                    {calcHorasMensais(sv)}h
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-1.5 justify-end">
                       <button onClick={() => salvarServicoPT(sv)} disabled={saving || !sv.nome}
                         className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
                         Guardar
@@ -493,11 +494,12 @@ export default function ConfigPage() {
                         </button>
                       )}
                     </div>
-                  </div>
-                </div>
+                  </td>
+                </tr>
               ))}
-            </div>
-          )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       {/* FISCAL */}
@@ -603,60 +605,63 @@ export default function ConfigPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-semibold text-base text-gray-800">Regras de bónus trimestral</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Define as horas mínimas e o valor. A app calcula automaticamente se atingiste o bónus em cada trimestre.</p>
+            <p className="text-xs text-gray-500 mt-0.5">A app calcula automaticamente se atingiste o bónus em cada trimestre.</p>
           </div>
           <button onClick={addConfigBonus}
-            className="px-3 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-200 transition-colors">
+            className="px-4 py-2 bg-gray-800 text-white rounded-xl text-sm font-semibold hover:bg-gray-900 transition-colors shadow-sm">
             + Regra
           </button>
         </div>
-        {configBonus.length === 0
-          ? <p className="text-sm text-gray-400 py-2">Nenhuma regra configurada. Clica em "+ Regra" para adicionar.</p>
-          : (
-            <div className="space-y-2">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Horas mín.</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Horas máx.</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Bónus (€)</th>
+                <th className="px-4 py-3 w-36"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {configBonus.length === 0 && (
+                <tr><td colSpan={4} className="px-4 py-4 text-sm text-gray-400 text-center">Nenhuma regra. Clica em &quot;+ Regra&quot; para adicionar.</td></tr>
+              )}
               {configBonus.map((cb, i) => (
-                <div key={cb.id || `new-${i}`} className="bg-white rounded-xl shadow-sm border border-gray-100 p-3">
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-3">
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Horas mín.</label>
-                      <input type="number" min="0" value={cb.horas_threshold}
-                        onChange={(e) => { const c = [...configBonus]; c[i] = { ...c[i], horas_threshold: Number(e.target.value) }; setConfigBonus(c) }}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Horas máx. (opcional)</label>
-                      <input type="number" min="0" value={cb.horas_max ?? ''} placeholder="—"
-                        onChange={(e) => { const c = [...configBonus]; c[i] = { ...c[i], horas_max: e.target.value ? Number(e.target.value) : null }; setConfigBonus(c) }}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Valor do bónus (€)</label>
-                      <input type="number" step="0.01" min="0" value={cb.valor_bonus}
-                        onChange={(e) => { const c = [...configBonus]; c[i] = { ...c[i], valor_bonus: Number(e.target.value) }; setConfigBonus(c) }}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div className="flex items-end">
-                      <p className="text-xs text-gray-500 pb-2">
-                        {cb.horas_threshold}h{cb.horas_max ? `–${cb.horas_max}h` : '+'} → {cb.valor_bonus}€
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <button onClick={() => salvarConfigBonus(cb)} disabled={saving}
-                      className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                      Guardar
-                    </button>
-                    {cb.id > 0 && (
-                      <button onClick={() => eliminarConfigBonus(cb.id)} disabled={saving}
-                        className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors">
-                        Eliminar
+                <tr key={cb.id || `new-${i}`}>
+                  <td className="px-4 py-3">
+                    <input type="number" min="0" value={cb.horas_threshold}
+                      onChange={(e) => { const c = [...configBonus]; c[i] = { ...c[i], horas_threshold: Number(e.target.value) }; setConfigBonus(c) }}
+                      className="w-20 border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td className="px-4 py-3">
+                    <input type="number" min="0" value={cb.horas_max ?? ''} placeholder="—"
+                      onChange={(e) => { const c = [...configBonus]; c[i] = { ...c[i], horas_max: e.target.value ? Number(e.target.value) : null }; setConfigBonus(c) }}
+                      className="w-20 border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td className="px-4 py-3">
+                    <input type="number" step="0.01" min="0" value={cb.valor_bonus}
+                      onChange={(e) => { const c = [...configBonus]; c[i] = { ...c[i], valor_bonus: Number(e.target.value) }; setConfigBonus(c) }}
+                      className="w-24 border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-1.5 justify-end">
+                      <button onClick={() => salvarConfigBonus(cb)} disabled={saving}
+                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                        Guardar
                       </button>
-                    )}
-                  </div>
-                </div>
+                      {cb.id > 0 && (
+                        <button onClick={() => eliminarConfigBonus(cb.id)} disabled={saving}
+                          className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors">
+                          Eliminar
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
               ))}
-            </div>
-          )}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   )
