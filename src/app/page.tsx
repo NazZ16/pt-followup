@@ -42,7 +42,7 @@ export default function BriefingPage() {
       supabase.from('v_mes_corrente').select('*').maybeSingle(),
       supabase.from('alunos').select('*').is('plano_confirmado_em', null).lt('ultima_avaliacao', cutoff).eq('estado', 'ativo'),
       supabase.from('briefings').select('*').eq('estado', 'aberto'),
-      supabase.from('sessoes').select('*, alunos(nome)').eq('data_sessao', hoje).eq('estado', 'realizada'),
+      supabase.from('sessoes').select('*, alunos(nome)').eq('data_sessao', hoje),
       supabase.from('sessoes').select('*, alunos(nome)').eq('data_sessao', amanha),
       supabase.from('tipos_sessao').select('*'),
       supabase.from('alunos').select('convertido, plano_confirmado_em, estado'),
@@ -67,6 +67,12 @@ export default function BriefingPage() {
       semPlanoTotal: aa.filter(x => !x.plano_confirmado_em && x.estado === 'ativo').length,
     })
     setLoading(false)
+  }
+
+  async function toggleSessao(sessao: Sessao & { nome?: string }) {
+    const novoEstado = sessao.estado === 'realizada' ? 'nao_realizada' : 'realizada'
+    await supabase.from('sessoes').update({ estado: novoEstado }).eq('id', sessao.id)
+    loadAll()
   }
 
   async function marcarFeita(tarefa: TarefaHoje) {
@@ -153,17 +159,25 @@ export default function BriefingPage() {
         <section>
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">🏋️ Sessões de hoje</p>
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-100">
-            {sessoesHoje.map(s => (
-              <div key={s.id} className="px-3 py-2.5 flex items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <span className="font-semibold text-sm text-gray-900">{s.nome ?? `Nº ${s.num_socio}`}</span>
-                  <span className="text-gray-400 mx-1.5">·</span>
-                  <span className="text-sm text-gray-500">{tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id}</span>
+            {sessoesHoje.map(s => {
+              const realizada = s.estado === 'realizada'
+              return (
+                <div key={s.id} className={`px-3 py-2.5 flex items-center gap-2.5 ${realizada ? '' : 'opacity-50'}`}>
+                  <button onClick={() => toggleSessao(s)}
+                    className={`w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-xs font-bold border-2 transition-colors ${
+                      realizada ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 text-gray-300 hover:border-emerald-400'
+                    }`}>
+                    {realizada ? '✓' : ''}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm text-gray-900 leading-tight">{s.nome ?? `Nº ${s.num_socio}`}</p>
+                    <p className="text-xs text-gray-400">{tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id}</p>
+                  </div>
+                  {s.conta_horas && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">⏱</span>}
+                  <span className="font-semibold text-sm text-gray-900">{fmt(s.valor_calculado)}</span>
                 </div>
-                {s.conta_horas && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">⏱ horas</span>}
-                <span className="font-semibold text-sm text-gray-900">{fmt(s.valor_calculado)}</span>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </section>
       )}
