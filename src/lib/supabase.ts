@@ -15,6 +15,8 @@ export type TipoFollowup = '7d' | '30d' | '60d' | '120d'
 export interface ServicoPT {
   id: number
   nome: string
+  codigo: string | null
+  custo: number | null
   tipo: 'semanal' | 'pack'
   sessoes_semana: number | null
   duracao_min: number | null

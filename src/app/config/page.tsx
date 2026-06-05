@@ -141,7 +141,7 @@ export default function ConfigPage() {
   async function salvarServicoPT(sv: ServicoPT) {
     setSaving(true)
     const hm = calcHorasMensais(sv)
-    const payload = { nome: sv.nome, tipo: sv.tipo, sessoes_semana: sv.sessoes_semana, duracao_min: sv.duracao_min, horas_mensais: hm }
+    const payload = { nome: sv.nome, codigo: sv.codigo || null, custo: sv.custo ?? null, tipo: sv.tipo, sessoes_semana: sv.sessoes_semana, duracao_min: sv.duracao_min, horas_mensais: hm }
     let error = null
     if (sv.id) {
       ({ error } = await supabase.from('servicos_pt').update(payload).eq('id', sv.id))
@@ -160,7 +160,7 @@ export default function ConfigPage() {
   }
 
   function addServicoPT() {
-    setServicosPT([...servicosPT, { id: 0, nome: '', tipo: 'semanal', sessoes_semana: 1, duracao_min: 60, horas_mensais: 0 }])
+    setServicosPT([...servicosPT, { id: 0, nome: '', codigo: null, custo: null, tipo: 'semanal', sessoes_semana: 1, duracao_min: 60, horas_mensais: 0 }])
   }
 
   function calcHorasMensais(sv: ServicoPT): number {
@@ -424,6 +424,18 @@ export default function ConfigPage() {
                       <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Nome</label>
                       <input value={sv.nome} placeholder="ex: PT 2x/sem 60min"
                         onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], nome: e.target.value }; setServicosPT(c) }}
+                        className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Código</label>
+                      <input value={sv.codigo ?? ''} placeholder="ex: PT2X60"
+                        onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], codigo: e.target.value || null }; setServicosPT(c) }}
+                        className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Custo mensal (€)</label>
+                      <input type="number" step="0.01" min="0" value={sv.custo ?? ''} placeholder="—"
+                        onChange={(e) => { const c = [...servicosPT]; c[i] = { ...c[i], custo: e.target.value ? Number(e.target.value) : null }; setServicosPT(c) }}
                         className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div>
