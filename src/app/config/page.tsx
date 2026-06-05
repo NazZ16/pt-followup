@@ -65,7 +65,7 @@ export default function ConfigPage() {
     setSaving(true)
     const { error } = await supabase.from('niveis_remuneracao').update({
       horas_min: n.horas_min, horas_max: n.horas_max,
-      valor_45min: n.valor_45min, valor_60min: n.valor_60min,
+      valor_30min: n.valor_30min, valor_45min: n.valor_45min, valor_60min: n.valor_60min,
     }).eq('id', n.id)
     setSaving(false)
     if (error) fail(error.message); else ok()
@@ -116,15 +116,12 @@ export default function ConfigPage() {
 
   async function salvarConfigBonus(cb: ConfigBonus) {
     setSaving(true)
+    const payload = { horas_threshold: cb.horas_threshold, horas_max: cb.horas_max ?? null, valor_bonus: cb.valor_bonus }
     let error = null
     if (cb.id) {
-      ({ error } = await supabase.from('config_bonus').update({
-        horas_threshold: cb.horas_threshold, valor_bonus: cb.valor_bonus,
-      }).eq('id', cb.id))
+      ({ error } = await supabase.from('config_bonus').update(payload).eq('id', cb.id))
     } else {
-      ({ error } = await supabase.from('config_bonus').insert({
-        horas_threshold: cb.horas_threshold, valor_bonus: cb.valor_bonus,
-      }))
+      ({ error } = await supabase.from('config_bonus').insert(payload))
     }
     setSaving(false)
     if (error) fail(error.message); else { ok(); load() }
@@ -138,7 +135,7 @@ export default function ConfigPage() {
   }
 
   function addConfigBonus() {
-    setConfigBonus([...configBonus, { id: 0, horas_threshold: 0, valor_bonus: 0 }])
+    setConfigBonus([...configBonus, { id: 0, horas_threshold: 0, horas_max: null, valor_bonus: 0 }])
   }
 
   async function salvarServicoPT(sv: ServicoPT) {
@@ -356,8 +353,9 @@ export default function ConfigPage() {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Nível</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Horas mín.</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Horas máx.</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Treino 45 min (€)</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Treino 60 min (€)</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">30 min (€)</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">45 min (€)</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">60 min (€)</th>
                 <th className="px-4 py-3 w-28"></th>
               </tr>
             </thead>
@@ -368,22 +366,27 @@ export default function ConfigPage() {
                   <td className="px-4 py-3">
                     <input type="number" value={n.horas_min}
                       onChange={(e) => { const c = [...niveis]; c[i] = { ...c[i], horas_min: Number(e.target.value) }; setNiveis(c) }}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className="w-16 border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </td>
                   <td className="px-4 py-3">
                     <input type="number" value={n.horas_max ?? ''} placeholder="—"
                       onChange={(e) => { const c = [...niveis]; c[i] = { ...c[i], horas_max: e.target.value ? Number(e.target.value) : null }; setNiveis(c) }}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className="w-16 border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </td>
+                  <td className="px-4 py-3">
+                    <input type="number" step="0.01" value={n.valor_30min}
+                      onChange={(e) => { const c = [...niveis]; c[i] = { ...c[i], valor_30min: Number(e.target.value) }; setNiveis(c) }}
+                      className="w-20 border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </td>
                   <td className="px-4 py-3">
                     <input type="number" step="0.01" value={n.valor_45min}
                       onChange={(e) => { const c = [...niveis]; c[i] = { ...c[i], valor_45min: Number(e.target.value) }; setNiveis(c) }}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className="w-20 border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </td>
                   <td className="px-4 py-3">
                     <input type="number" step="0.01" value={n.valor_60min}
                       onChange={(e) => { const c = [...niveis]; c[i] = { ...c[i], valor_60min: Number(e.target.value) }; setNiveis(c) }}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className="w-20 border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </td>
                   <td className="px-4 py-3">
                     <button onClick={() => salvarNivel(n)} disabled={saving}
@@ -598,52 +601,48 @@ export default function ConfigPage() {
         {configBonus.length === 0
           ? <p className="text-sm text-gray-400 py-2">Nenhuma regra configurada. Clica em "+ Regra" para adicionar.</p>
           : (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50">
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Horas mínimas / trimestre</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Valor do bónus (€)</th>
-                    <th className="px-4 py-3 w-36"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {configBonus.map((cb, i) => (
-                    <tr key={cb.id || `new-${i}`}>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <input type="number" min="0" value={cb.horas_threshold}
-                            onChange={(e) => { const c = [...configBonus]; c[i] = { ...c[i], horas_threshold: Number(e.target.value) }; setConfigBonus(c) }}
-                            className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                          <span className="text-sm text-gray-500">horas</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <input type="number" step="0.01" min="0" value={cb.valor_bonus}
-                            onChange={(e) => { const c = [...configBonus]; c[i] = { ...c[i], valor_bonus: Number(e.target.value) }; setConfigBonus(c) }}
-                            className="w-28 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                          <span className="text-sm text-gray-500">€</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1.5 justify-end">
-                          <button onClick={() => salvarConfigBonus(cb)} disabled={saving}
-                            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                            Guardar
-                          </button>
-                          {cb.id > 0 && (
-                            <button onClick={() => eliminarConfigBonus(cb.id)} disabled={saving}
-                              className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors">
-                              Eliminar
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-2">
+              {configBonus.map((cb, i) => (
+                <div key={cb.id || `new-${i}`} className="bg-white rounded-xl shadow-sm border border-gray-100 p-3">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-3">
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Horas mín.</label>
+                      <input type="number" min="0" value={cb.horas_threshold}
+                        onChange={(e) => { const c = [...configBonus]; c[i] = { ...c[i], horas_threshold: Number(e.target.value) }; setConfigBonus(c) }}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Horas máx. (opcional)</label>
+                      <input type="number" min="0" value={cb.horas_max ?? ''} placeholder="—"
+                        onChange={(e) => { const c = [...configBonus]; c[i] = { ...c[i], horas_max: e.target.value ? Number(e.target.value) : null }; setConfigBonus(c) }}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Valor do bónus (€)</label>
+                      <input type="number" step="0.01" min="0" value={cb.valor_bonus}
+                        onChange={(e) => { const c = [...configBonus]; c[i] = { ...c[i], valor_bonus: Number(e.target.value) }; setConfigBonus(c) }}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div className="flex items-end">
+                      <p className="text-xs text-gray-500 pb-2">
+                        {cb.horas_threshold}h{cb.horas_max ? `–${cb.horas_max}h` : '+'} → {cb.valor_bonus}€
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button onClick={() => salvarConfigBonus(cb)} disabled={saving}
+                      className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                      Guardar
+                    </button>
+                    {cb.id > 0 && (
+                      <button onClick={() => eliminarConfigBonus(cb.id)} disabled={saving}
+                        className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors">
+                        Eliminar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
       </section>

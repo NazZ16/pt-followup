@@ -69,6 +69,7 @@ export interface NivelRemuneracao {
   nivel: number
   horas_min: number
   horas_max: number | null
+  valor_30min: number
   valor_45min: number
   valor_60min: number
   vigente_desde: string
@@ -135,6 +136,7 @@ export interface SsTrimestral {
 export interface ConfigBonus {
   id: number
   horas_threshold: number
+  horas_max: number | null
   valor_bonus: number
 }
 
