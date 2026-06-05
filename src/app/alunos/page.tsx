@@ -53,7 +53,7 @@ export default function AlunosPage() {
     const [{ data: aData }, { data: tData }, { data: spData }] = await Promise.all([
       supabase.from('alunos').select('*').order('nome'),
       supabase.from('tarefas_followup').select('*').order('data_prevista'),
-      supabase.from('servicos_pt').select('*').order('horas_semanais'),
+      supabase.from('servicos_pt').select('*').order('nome'),
     ])
     setServicosPT((spData as ServicoPT[]) || [])
     const pendentesMap: Record<string, TarefaFollowup[]> = {}
