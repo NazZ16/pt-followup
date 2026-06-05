@@ -39,6 +39,8 @@ export default function AlunosPage() {
   const [formEdit, setFormEdit] = useState({ nome: '', contacto: '', num_socio: '', tipo: 'rep' as TipoAluno, ultima_avaliacao: '' })
   const [novoAluno, setNovoAluno] = useState(false)
   const [form, setForm] = useState({ num_socio: '', contacto: '', nome: '', tipo: 'rep' as TipoAluno, ultima_avaliacao: '' })
+  const [formJaPT, setFormJaPT] = useState(false)
+  const [formPTNovo, setFormPTNovo] = useState({ plano_pt: '', horas_pt_mensais: '', meses_pagos_pt: '1' })
   const [saving, setSaving] = useState(false)
   const [servicosPT, setServicosPT] = useState<ServicoPT[]>([])
   const [marcandoPT, setMarcandoPT] = useState<string | null>(null)
@@ -124,8 +126,16 @@ export default function AlunosPage() {
   async function salvarNovoAluno() {
     if (!form.num_socio || !form.contacto || !form.nome) return
     setSaving(true)
-    await supabase.from('alunos').upsert({ num_socio: form.num_socio, contacto: form.contacto, nome: form.nome, tipo: form.tipo, convertido: false, ultima_avaliacao: form.ultima_avaliacao || null }, { onConflict: 'num_socio,contacto' })
+    await supabase.from('alunos').upsert({
+      num_socio: form.num_socio, contacto: form.contacto, nome: form.nome,
+      tipo: form.tipo, ultima_avaliacao: form.ultima_avaliacao || null,
+      convertido: formJaPT,
+      plano_pt: formJaPT && formPTNovo.plano_pt ? formPTNovo.plano_pt : null,
+      horas_pt_mensais: formJaPT && formPTNovo.horas_pt_mensais ? Number(formPTNovo.horas_pt_mensais) : null,
+      meses_pagos_pt: formJaPT ? Number(formPTNovo.meses_pagos_pt) || 1 : null,
+    }, { onConflict: 'num_socio,contacto' })
     setForm({ num_socio: '', contacto: '', nome: '', tipo: 'rep', ultima_avaliacao: '' })
+    setFormJaPT(false); setFormPTNovo({ plano_pt: '', horas_pt_mensais: '', meses_pagos_pt: '1' })
     setNovoAluno(false); setSaving(false); load()
   }
 
@@ -196,9 +206,50 @@ export default function AlunosPage() {
             <input type="date" value={form.ultima_avaliacao} onChange={e => setForm({ ...form, ultima_avaliacao: e.target.value })}
               className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={formJaPT} onChange={e => setFormJaPT(e.target.checked)} className="rounded" />
+            <span className="font-medium text-emerald-700">Já é cliente PT</span>
+          </label>
+          {formJaPT && (
+            <div className="space-y-2 border-t border-gray-100 pt-2">
+              <select value={formPTNovo.plano_pt}
+                onChange={e => {
+                  const sv = servicosPT.find(s => s.nome === e.target.value)
+                  const hm = sv
+                    ? sv.tipo === 'semanal'
+                      ? String(Math.round((sv.sessoes_semana ?? 1) * ((sv.duracao_min ?? 60) / 60) * 4.33 * 100) / 100)
+                      : String(sv.horas_mensais)
+                    : formPTNovo.horas_pt_mensais
+                  setFormPTNovo({ ...formPTNovo, plano_pt: e.target.value, horas_pt_mensais: hm })
+                }}
+                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Selecionar serviço...</option>
+                {servicosPT.map(sv => {
+                  const hm = sv.tipo === 'semanal'
+                    ? Math.round((sv.sessoes_semana ?? 1) * ((sv.duracao_min ?? 60) / 60) * 4.33 * 100) / 100
+                    : sv.horas_mensais
+                  return <option key={sv.id} value={sv.nome}>{sv.nome} ({hm}h/mês)</option>
+                })}
+              </select>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Horas / mês</label>
+                  <input type="number" step="0.01" value={formPTNovo.horas_pt_mensais} placeholder="0"
+                    onChange={e => setFormPTNovo({ ...formPTNovo, horas_pt_mensais: e.target.value })}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Meses pagos</label>
+                  <input type="number" min="1" value={formPTNovo.meses_pagos_pt}
+                    onChange={e => setFormPTNovo({ ...formPTNovo, meses_pagos_pt: e.target.value })}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex gap-2">
             <button onClick={salvarNovoAluno} disabled={saving} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">Guardar</button>
-            <button onClick={() => setNovoAluno(false)} className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">Cancelar</button>
+            <button onClick={() => { setNovoAluno(false); setFormJaPT(false) }} className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">Cancelar</button>
           </div>
         </div>
       )}
