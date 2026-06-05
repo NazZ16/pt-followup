@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase, TarefaHoje, MesCorrente, Aluno, Sessao, TipoSessaoRow } from '@/lib/supabase'
+import { supabase, TarefaHoje, MesCorrente, Aluno, Sessao, TipoSessaoRow, NivelRemuneracao, ConfigFiscal, SsTrimestral, ServicoPT } from '@/lib/supabase'
 import { gerarMensagem, gerarMensagemLembrete, gerarLinkWhatsApp } from '@/lib/whatsapp'
 import { marcarTarefaViaScript, appsScriptConfigurado } from '@/lib/appsscript'
 
@@ -37,18 +37,21 @@ export default function BriefingPage() {
     const hoje = new Date().toISOString().slice(0, 10)
     const amanha = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
     const cutoff = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10)
-    const [{ data: t }, { data: m }, { data: a }, { data: b }, { data: sh }, { data: sa }, { data: ts }, { data: allAlunos }] = await Promise.all([
+    const [{ data: t }, { data: a }, { data: b }, { data: sh }, { data: sa }, { data: ts }, { data: allAlunos }, { data: alunosPT }, { data: svs }, { data: nvs }, { data: fc }, { data: ssData }] = await Promise.all([
       supabase.from('v_tarefas_hoje').select('*').order('data_prevista'),
-      supabase.from('v_mes_corrente').select('*').maybeSingle(),
       supabase.from('alunos').select('*').is('plano_confirmado_em', null).lt('ultima_avaliacao', cutoff).eq('estado', 'ativo'),
       supabase.from('briefings').select('*').eq('estado', 'aberto'),
       supabase.from('sessoes').select('*, alunos(nome)').eq('data_sessao', hoje),
       supabase.from('sessoes').select('*, alunos(nome)').eq('data_sessao', amanha),
       supabase.from('tipos_sessao').select('*'),
       supabase.from('alunos').select('convertido, plano_confirmado_em, estado'),
+      supabase.from('alunos').select('*').eq('convertido', true).eq('estado', 'ativo'),
+      supabase.from('servicos_pt').select('*'),
+      supabase.from('niveis_remuneracao').select('*').order('horas_min'),
+      supabase.from('config_fiscal').select('*').order('vigente_desde', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('ss_trimestral').select('*').order('ano_aplicacao', { ascending: false }).order('trimestre_aplicacao', { ascending: false }).limit(1).maybeSingle(),
     ])
     setTarefas((t as TarefaHoje[]) || [])
-    setMes(m as MesCorrente | null)
     setSemPlano((a as Aluno[]) || [])
     setBriefingAberto(!!b?.length && new Date().getDate() > 5)
     setSessoesHoje(((sh as (Sessao & { alunos?: { nome: string } })[]) || []).map(s => ({ ...s, nome: s.alunos?.nome })))
@@ -66,6 +69,51 @@ export default function BriefingPage() {
       convertidos: aa.filter(x => x.convertido && x.estado === 'ativo').length,
       semPlanoTotal: aa.filter(x => !x.plano_confirmado_em && x.estado === 'ativo').length,
     })
+
+    // Calcular mês em curso a partir dos planos PT activos
+    const aptivos = (alunosPT as Aluno[]) || []
+    const servicosList = (svs as ServicoPT[]) || []
+    const niveisList = (nvs as NivelRemuneracao[]) || []
+    const taxaIrs = (fc as ConfigFiscal | null)?.taxa_irs ?? 0.1
+    const ssMensal = (ssData as SsTrimestral | null)?.contribuicao_mensal ?? 0
+
+    const totalHoras = Math.round(aptivos.reduce((sum, a) => sum + (a.horas_pt_mensais || 0), 0) * 100) / 100
+    const nivelAtual = [...niveisList].reverse().find(n =>
+      totalHoras >= n.horas_min && (n.horas_max == null || totalHoras <= n.horas_max)
+    ) ?? null
+
+    let bruto = 0
+    for (const aluno of aptivos) {
+      const sv = servicosList.find(s => s.nome === aluno.plano_pt)
+      if (!nivelAtual) continue
+      if (sv && sv.tipo === 'semanal') {
+        const dur = sv.duracao_min ?? 60
+        const rate = dur <= 30 ? nivelAtual.valor_30min : dur <= 45 ? nivelAtual.valor_45min : nivelAtual.valor_60min
+        bruto += (sv.sessoes_semana || 1) * 4.33 * rate
+      } else if (sv && sv.tipo === 'pack' && sv.custo) {
+        bruto += sv.custo
+      } else {
+        // fallback: horas × valor_60min
+        bruto += (aluno.horas_pt_mensais || 0) * nivelAtual.valor_60min
+      }
+    }
+    bruto = Math.round(bruto * 100) / 100
+    const irsRetido = Math.round(bruto * taxaIrs * 100) / 100
+    const liquido = Math.round((bruto - irsRetido - ssMensal) * 100) / 100
+
+    setMes(aptivos.length === 0 ? null : {
+      total_sessoes: aptivos.length,
+      horas_nivel: totalHoras,
+      bruto_acumulado: bruto,
+      nivel_atual: nivelAtual?.nivel ?? null,
+      nivel_horas_min: nivelAtual?.horas_min ?? null,
+      nivel_horas_max: nivelAtual?.horas_max ?? null,
+      taxa_irs: taxaIrs,
+      irs_estimado: irsRetido,
+      ss_mensal: ssMensal,
+      liquido_estimado: liquido,
+    })
+
     setLoading(false)
   }
 
