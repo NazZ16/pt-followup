@@ -27,7 +27,7 @@ export default function ConfigPage() {
       supabase.from('bonus_trimestral').select('*').order('ano', { ascending: false }),
       supabase.from('ss_trimestral').select('*').order('ano_referencia', { ascending: false }),
       supabase.from('config_bonus').select('*').order('horas_threshold'),
-      supabase.from('servicos_pt').select('*').order('horas_semanais'),
+      supabase.from('servicos_pt').select('*').order('nome'),
     ])
     setNiveis((n as NivelRemuneracao[]) || [])
     setTiposSessao((ts as TipoSessaoRow[]) || [])
