@@ -204,6 +204,44 @@ export default function FinanceiroPage() {
     load()
   }
 
+  async function recalcularSessoesBriefing(briefingId: string) {
+    const { data: niveisData } = await supabase.from('niveis_remuneracao').select('*').order('horas_min')
+    const niveis = (niveisData || []) as { horas_min: number; horas_max: number | null; valor_45min: number; valor_60min: number }[]
+    const repTipo = tiposSessao.find(t => t.id === 'rep')
+
+    // Sessões do mês ordenadas por data (para cálculo cumulativo correcto)
+    const sessoesDoMes = sessoes
+      .filter(s => s.mes_briefing === briefingId && s.estado === 'realizada')
+      .sort((a, b) => a.data_sessao.localeCompare(b.data_sessao))
+
+    let horasAcumuladas = 0
+    for (const s of sessoesDoMes) {
+      const aluno = alunos.find(a => a.num_socio === s.num_socio && a.contacto === s.contacto)
+      const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
+      const contaHoras = !!aluno?.convertido && !!tipo?.conta_para_nivel
+
+      let valorCalculado: number | null = s.valor_calculado
+      if (tipo?.categoria === 'avaliacao') {
+        valorCalculado = tipo.valor_fixo ?? 0
+      } else if (tipo?.id === 'mi') {
+        const valorRep = repTipo?.valor_fixo ?? 0
+        valorCalculado = valorRep * Math.ceil((tipo.duracao_min ?? 60) / 60)
+      } else if (tipo?.categoria === 'treino' && aluno?.convertido) {
+        const durSessao = (tipo.duracao_min ?? 60) / 60
+        const horasMes = horasAcumuladas + durSessao
+        const nivel = niveis
+          .filter(n => horasMes >= n.horas_min && (n.horas_max == null || horasMes < n.horas_max))
+          .pop()
+        if (nivel) valorCalculado = tipo.duracao_min === 45 ? nivel.valor_45min : nivel.valor_60min
+      }
+
+      if (contaHoras) horasAcumuladas += (tipo?.duracao_min ?? 0) / 60
+
+      await supabase.from('sessoes').update({ valor_calculado: valorCalculado, conta_horas: contaHoras }).eq('id', s.id)
+    }
+    load()
+  }
+
   async function registarSessao() {
     if (!formSessao.num_socio || !formSessao.tipo_sessao_id || !formSessao.data_sessao) return
     setSaving(true)
@@ -481,10 +519,18 @@ export default function FinanceiroPage() {
                       })()}
                     </div>
 
-                    <button onClick={() => setMesSelecionado(mesSelecionado === b.id ? null : b.id)}
-                      className="mt-3 text-sm text-blue-600 font-medium hover:underline">
-                      {mesSelecionado === b.id ? 'Ocultar sessões' : `Ver sessões (${sessoesByMes[b.id]?.length ?? 0})`}
-                    </button>
+                    <div className="mt-3 flex items-center gap-3">
+                      <button onClick={() => setMesSelecionado(mesSelecionado === b.id ? null : b.id)}
+                        className="text-sm text-blue-600 font-medium hover:underline">
+                        {mesSelecionado === b.id ? 'Ocultar sessões' : `Ver sessões (${sessoesByMes[b.id]?.length ?? 0})`}
+                      </button>
+                      {b.estado === 'aberto' && (
+                        <button onClick={() => recalcularSessoesBriefing(b.id)}
+                          className="text-sm text-amber-600 font-medium hover:underline">
+                          ↻ Recalcular valores
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {mesSelecionado === b.id && (
