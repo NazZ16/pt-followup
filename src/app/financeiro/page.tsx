@@ -209,7 +209,11 @@ export default function FinanceiroPage() {
       .order('data_sessao')
     const sessoesDoMes = (sesData as Sessao[]) || []
 
-    let horasAcumuladas = 0
+    // Nivel fixo para o mês — determinado pelas horas totais de planos vendidos
+    const nivelDoMes = niveis
+      .filter(n => horasPlanoMensal >= n.horas_min && (n.horas_max == null || horasPlanoMensal < n.horas_max))
+      .pop()
+
     let atualizadas = 0
     for (const s of sessoesDoMes) {
       // Buscar aluno por num_socio (contacto pode diferir ligeiramente)
@@ -221,22 +225,15 @@ export default function FinanceiroPage() {
       let valorCalculado: number | null = s.valor_calculado
 
       if (s.num_socio === 'MI' || tipo?.id === 'mi') {
-        // MI standalone — rep.valor_fixo × ceil(horas)
         const valorRep = repTipo?.valor_fixo ?? 0
         const duracaoMin = tipo?.duracao_min ?? 60
         valorCalculado = valorRep * Math.ceil(duracaoMin / 60)
       } else if (tipo?.categoria === 'avaliacao') {
         valorCalculado = tipo.valor_fixo ?? 0
-      } else if (tipo?.categoria === 'treino' && aluno?.convertido) {
-        const durSessao = (tipo.duracao_min ?? 60) / 60
-        const horasMes = horasAcumuladas + durSessao
-        const nivel = niveis
-          .filter(n => horasMes >= n.horas_min && (n.horas_max == null || horasMes < n.horas_max))
-          .pop()
-        if (nivel) valorCalculado = (tipo.duracao_min ?? 60) <= 45 ? nivel.valor_45min : nivel.valor_60min
+      } else if (tipo?.categoria === 'treino' && aluno?.convertido && nivelDoMes) {
+        // Valor = taxa do nivel actual para a duração do treino
+        valorCalculado = (tipo.duracao_min ?? 60) <= 45 ? nivelDoMes.valor_45min : nivelDoMes.valor_60min
       }
-
-      if (contaHoras) horasAcumuladas += (tipo?.duracao_min ?? 0) / 60
 
       await supabase.from('sessoes').update({ valor_calculado: valorCalculado, conta_horas: contaHoras }).eq('id', s.id)
       atualizadas++
@@ -276,16 +273,12 @@ export default function FinanceiroPage() {
       const horas = Math.ceil((tipo.duracao_min ?? 60) / 60)
       valorCalculado = valorRep * horas
     } else if (tipo?.categoria === 'treino' && aluno?.convertido) {
-      const { data: niveis } = await supabase.from('niveis_remuneracao').select('*').order('horas_min')
-      const sessoesDoMes = sessoes.filter(s => s.mes_briefing === mesBriefing && s.conta_horas && s.estado === 'realizada')
-      const horasMes = sessoesDoMes.reduce((acc, s) => {
-        const t = tiposSessao.find(x => x.id === s.tipo_sessao_id)
-        return acc + (t?.duracao_min ?? 0) / 60
-      }, 0) + (tipo.duracao_min ?? 0) / 60
-      const nivel = ((niveis || []) as { horas_min: number; horas_max: number | null; valor_45min: number; valor_60min: number }[])
-        .filter(n => horasMes >= n.horas_min && (n.horas_max == null || horasMes < n.horas_max))
+      const { data: niveisData } = await supabase.from('niveis_remuneracao').select('*').order('horas_min')
+      // Nivel determinado pelas horas totais de planos vendidos (não sessões reais)
+      const nivel = ((niveisData || []) as { horas_min: number; horas_max: number | null; valor_45min: number; valor_60min: number }[])
+        .filter(n => horasPlanoMensal >= n.horas_min && (n.horas_max == null || horasPlanoMensal < n.horas_max))
         .pop()
-      if (nivel) valorCalculado = tipo.duracao_min === 45 ? nivel.valor_45min : nivel.valor_60min
+      if (nivel) valorCalculado = (tipo.duracao_min ?? 60) <= 45 ? nivel.valor_45min : nivel.valor_60min
     }
 
     await supabase.from('sessoes').insert({

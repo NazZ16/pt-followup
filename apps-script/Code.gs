@@ -74,8 +74,10 @@ function sincronizarDesde1Junho() {
 // SINCRONIZAR PERÍODO
 // ============================================================
 function sincronizarPeriodo(inicio, fim) {
-  const niveis    = carregarNiveis();
-  const tipos     = carregarTiposSessao();
+  const niveis     = carregarNiveis();
+  const tipos      = carregarTiposSessao();
+  const nivelAtual = calcularNivelAtual(niveis); // nivel fixo baseado em planos vendidos
+  Logger.log('Nivel actual: ' + (nivelAtual ? nivelAtual.nivel : 'nenhum'));
   const calendario = CalendarApp.getDefaultCalendar();
   const eventos   = calendario.getEvents(inicio, fim);
 
@@ -96,7 +98,7 @@ function sincronizarPeriodo(inicio, fim) {
     const tituloLower = titulo.toLowerCase().trim();
     const tipoStandalone = TIPOS_STANDALONE.find(t => tituloLower === t);
     if (tipoStandalone) {
-      registarSessaoStandalone(tipoStandalone, dataEvento, horaInicio, duracaoMin, niveis, tipos);
+      registarSessaoStandalone(tipoStandalone, dataEvento, horaInicio, duracaoMin, nivelAtual, tipos);
       processados++;
       return;
     }
@@ -109,7 +111,7 @@ function sincronizarPeriodo(inicio, fim) {
       if (!aluno) return;
     }
 
-    registarSessaoComValor(parsed, dataEvento, horaInicio, niveis, tipos);
+    registarSessaoComValor(parsed, dataEvento, horaInicio, nivelAtual, tipos);
     processados++;
   });
 
@@ -253,7 +255,7 @@ function procurarAluno(parsed) {
 // REGISTAR SESSÃO STANDALONE (sem aluno — ex: MI)
 // Duração vem do evento do calendário
 // ============================================================
-function registarSessaoStandalone(tipoSessaoId, dataEvento, horaInicio, duracaoMin, niveis, tipos) {
+function registarSessaoStandalone(tipoSessaoId, dataEvento, horaInicio, duracaoMin, nivelAtual, tipos) {
   // Verificar se já existe
   const existente = supabaseFetch(
     '/rest/v1/sessoes?num_socio=eq.MI&data_sessao=eq.' + dataEvento +
@@ -303,7 +305,7 @@ function registarSessaoStandalone(tipoSessaoId, dataEvento, horaInicio, duracaoM
 // ============================================================
 // REGISTAR SESSÃO COM VALOR CALCULADO
 // ============================================================
-function registarSessaoComValor(parsed, dataEvento, horaInicio, niveis, tipos) {
+function registarSessaoComValor(parsed, dataEvento, horaInicio, nivelAtual, tipos) {
   // Procurar aluno na BD
   const aluno = procurarAluno(parsed);
   const numSocio  = aluno ? aluno.num_socio  : parsed.numSocio;
@@ -336,7 +338,7 @@ function registarSessaoComValor(parsed, dataEvento, horaInicio, niveis, tipos) {
   const contaHoras   = convertido && contaPorNivel;
 
   // Calcular valor
-  const valorCalculado = calcularValor(parsed.tipoSessaoId, tipoInfo, convertido, numSocio, contacto || '', mesBriefing, niveis, tipos);
+  const valorCalculado = calcularValor(parsed.tipoSessaoId, tipoInfo, convertido, nivelAtual, tipos);
 
   const payload = {
     num_socio:         numSocio,
@@ -361,8 +363,9 @@ function registarSessaoComValor(parsed, dataEvento, horaInicio, niveis, tipos) {
 
 // ============================================================
 // CÁLCULO DO VALOR DA SESSÃO
+// nivelAtual — determinado pelas horas totais de planos vendidos
 // ============================================================
-function calcularValor(tipoSessaoId, tipoInfo, convertido, numSocio, contacto, mesBriefing, niveis, tipos) {
+function calcularValor(tipoSessaoId, tipoInfo, convertido, nivelAtual, tipos) {
   if (!tipoInfo) return null;
 
   // Avaliação com valor fixo
@@ -375,44 +378,23 @@ function calcularValor(tipoSessaoId, tipoInfo, convertido, numSocio, contacto, m
     return 0;
   }
 
-  // MI — valor = rep.valor_fixo × ceil(horas)
+  // MI — rep.valor_fixo × ceil(horas da duração do evento)
   if (tipoSessaoId === 'mi') {
-    const repTipo  = tipos.find(t => t.id === 'rep');
+    const repTipo  = tipos.find(function(t) { return t.id === 'rep'; });
     const valorRep = repTipo ? (repTipo.valor_fixo || 0) : 0;
     const horas    = Math.ceil((tipoInfo.duracao_min || 60) / 60);
     return valorRep * horas;
   }
 
-  // Treino PT — só calcula para alunos convertidos
-  if (tipoInfo.categoria === 'treino' && convertido) {
-    // Horas já acumuladas no mês para este aluno (sessões realizadas com conta_para_nivel)
-    const sessoesExistentes = supabaseFetch(
-      '/rest/v1/sessoes?num_socio=eq.' + encodeURIComponent(numSocio) +
-      '&contacto=eq.' + encodeURIComponent(contacto) +
-      '&mes_briefing=eq.' + mesBriefing +
-      '&estado=eq.realizada' +
-      '&select=tipo_sessao_id,conta_horas',
-      'GET'
-    ) || [];
-
-    const horasAcumuladas = sessoesExistentes.reduce(function(acc, s) {
-      const t = tipos.find(function(x) { return x.id === s.tipo_sessao_id; });
-      if (!t || !t.conta_para_nivel) return acc;
-      return acc + (t.duracao_min || 0) / 60;
-    }, 0);
-
-    const durSessao  = (tipoInfo.duracao_min || 60) / 60;
-    const horasMes   = horasAcumuladas + durSessao;
-
-    const nivel = niveis
-      .filter(function(n) { return horasMes >= n.horas_min && (n.horas_max == null || horasMes < n.horas_max); })
-      .pop();
-
-    if (!nivel) return null;
-    return (tipoInfo.duracao_min || 60) <= 45 ? nivel.valor_45min : nivel.valor_60min;
+  // Treino PT — nivel fixo baseado nos planos vendidos, valor conforme duração
+  if (tipoInfo.categoria === 'treino' && convertido && nivelAtual) {
+    const duracao = tipoInfo.duracao_min || 60;
+    if (duracao <= 30) return nivelAtual.valor_30min;
+    if (duracao <= 45) return nivelAtual.valor_45min;
+    return nivelAtual.valor_60min;
   }
 
-  // SW ou outro tipo sem lógica especial — valor fixo se existir
+  // Outro tipo com valor fixo
   if (tipoInfo.valor_fixo != null) return tipoInfo.valor_fixo;
 
   return null;
@@ -429,6 +411,33 @@ function carregarNiveis() {
 function carregarTiposSessao() {
   const resp = supabaseFetch('/rest/v1/tipos_sessao?select=*', 'GET');
   return resp || [];
+}
+
+// Calcula as horas totais de planos vendidos (alunos PT activos)
+// Determina o nivel de remuneração actual
+function calcularNivelAtual(niveis) {
+  const alunosPT = supabaseFetch(
+    '/rest/v1/alunos?convertido=eq.true&estado=eq.ativo&select=plano_pt,horas_pt_mensais',
+    'GET'
+  ) || [];
+  const servicosPT = supabaseFetch('/rest/v1/servicos_pt?select=*', 'GET') || [];
+
+  const horasTotal = alunosPT.reduce(function(acc, a) {
+    const sv = servicosPT.find(function(s) { return s.nome === a.plano_pt; });
+    if (sv) {
+      const dur = (sv.duracao_min || 60) / 60;
+      const sessoes = sv.sessoes_semana || 1;
+      const mult = sv.tipo === 'semanal' ? 4.33 : 1;
+      return acc + sessoes * mult * dur;
+    }
+    return acc + (a.horas_pt_mensais || 0);
+  }, 0);
+
+  Logger.log('Horas plano total: ' + Math.round(horasTotal * 100) / 100);
+
+  return niveis
+    .filter(function(n) { return horasTotal >= n.horas_min && (n.horas_max == null || horasTotal < n.horas_max); })
+    .pop() || null;
 }
 
 // ============================================================
