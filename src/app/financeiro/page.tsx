@@ -96,9 +96,10 @@ export default function FinanceiroPage() {
     if (briefing.estado === 'aberto') {
       const sessoesDoMes = sessoes.filter(s => s.mes_briefing === briefing.id && s.estado === 'realizada')
       const bruto = sessoesDoMes.reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0)
-      const horas = sessoesDoMes.filter(s => s.conta_horas).reduce((acc, s) => {
+      const horas = sessoesDoMes.reduce((acc, s) => {
         const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
-        return acc + (tipo?.duracao_min ?? 0) / 60
+        if (!tipo?.conta_para_nivel) return acc
+        return acc + (tipo.duracao_min ?? 0) / 60
       }, 0)
       const irs = bruto * taxaIrs
       const liquido = bruto - irs - ssMensal
@@ -106,13 +107,16 @@ export default function FinanceiroPage() {
       // Último mês do trimestre (3, 6, 9, 12) — calcular bónus automaticamente
       if (briefing.mes % 3 === 0 && configBonus.length > 0) {
         const sessTrimestre = sessoes.filter(s => {
-          if (!s.mes_briefing || !s.conta_horas || s.estado !== 'realizada') return false
+          if (!s.mes_briefing || s.estado !== 'realizada') return false
+          const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
+          if (!tipo?.conta_para_nivel) return false
           const [a, m] = s.mes_briefing.split('-').map(Number)
           return a === briefing.ano && Math.ceil(m / 3) === trim
         })
         const horasTrim = Math.round(sessTrimestre.reduce((acc, s) => {
           const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
-          return acc + (tipo?.duracao_min ?? 0) / 60
+          if (!tipo?.conta_para_nivel) return acc
+          return acc + (tipo.duracao_min ?? 0) / 60
         }, 0) * 100) / 100
         // Regra com maior threshold atingido
         const regraAtingida = [...configBonus]
@@ -153,9 +157,10 @@ export default function FinanceiroPage() {
     for (const b of abertos) {
       const sessoesDoMes = sessoesAtuais.filter(s => s.mes_briefing === b.id && s.estado === 'realizada')
       const bruto = Math.round(sessoesDoMes.reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0) * 100) / 100
-      const horas = Math.round(sessoesDoMes.filter(s => s.conta_horas).reduce((acc, s) => {
+      const horas = Math.round(sessoesDoMes.reduce((acc, s) => {
         const t = tiposAtuais.find(x => x.id === s.tipo_sessao_id)
-        return acc + (t?.duracao_min ?? 0) / 60
+        if (!t?.conta_para_nivel) return acc
+        return acc + (t.duracao_min ?? 0) / 60
       }, 0) * 100) / 100
       const irs = Math.round(bruto * taxaIrs * 100) / 100
       const liquido = Math.round((bruto - irs - ssMensal) * 100) / 100
@@ -267,10 +272,11 @@ export default function FinanceiroPage() {
   const mesInicio = (trimAtual - 1) * 3 + 1
   const mesesTrim = [mesInicio, mesInicio + 1, mesInicio + 2].map(m => `${anoAtual}-${String(m).padStart(2, '0')}`)
   const horasTrimAtual = Math.round(sessoes.filter(s =>
-    s.mes_briefing && mesesTrim.includes(s.mes_briefing) && s.conta_horas && s.estado === 'realizada'
+    s.mes_briefing && mesesTrim.includes(s.mes_briefing) && s.estado === 'realizada'
   ).reduce((acc, s) => {
     const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
-    return acc + (tipo?.duracao_min ?? 0) / 60
+    if (!tipo?.conta_para_nivel) return acc
+    return acc + (tipo.duracao_min ?? 0) / 60
   }, 0) * 10) / 10
   const melhorRegraAtingida = [...configBonus]
     .sort((a, b) => b.horas_threshold - a.horas_threshold)
@@ -293,9 +299,10 @@ export default function FinanceiroPage() {
       if (b.estado !== 'aberto') continue
       const sessoesDoMes = sessoes.filter(s => s.mes_briefing === b.id && s.estado === 'realizada')
       const bruto = Math.round(sessoesDoMes.reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0) * 100) / 100
-      const horas = Math.round(sessoesDoMes.filter(s => s.conta_horas).reduce((acc, s) => {
+      const horas = Math.round(sessoesDoMes.reduce((acc, s) => {
         const t = tiposSessao.find(x => x.id === s.tipo_sessao_id)
-        return acc + (t?.duracao_min ?? 0) / 60
+        if (!t?.conta_para_nivel) return acc
+        return acc + (t.duracao_min ?? 0) / 60
       }, 0) * 100) / 100
       const irs = Math.round(bruto * taxaIrs * 100) / 100
       const liquido = Math.round((bruto - irs - ssMensal) * 100) / 100
