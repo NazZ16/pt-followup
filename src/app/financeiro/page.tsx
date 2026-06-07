@@ -202,36 +202,52 @@ export default function FinanceiroPage() {
     const niveis = (niveisData || []) as { horas_min: number; horas_max: number | null; valor_45min: number; valor_60min: number }[]
     const repTipo = tiposSessao.find(t => t.id === 'rep')
 
-    // Sessões do mês ordenadas por data (para cálculo cumulativo correcto)
-    const sessoesDoMes = sessoes
-      .filter(s => s.mes_briefing === briefingId && s.estado === 'realizada')
-      .sort((a, b) => a.data_sessao.localeCompare(b.data_sessao))
+    // Buscar sessões directamente da BD (estado mais fresco)
+    const { data: sesData } = await supabase
+      .from('sessoes').select('*')
+      .eq('mes_briefing', briefingId).eq('estado', 'realizada')
+      .order('data_sessao')
+    const sessoesDoMes = (sesData as Sessao[]) || []
 
     let horasAcumuladas = 0
+    let atualizadas = 0
     for (const s of sessoesDoMes) {
+      // Buscar aluno por num_socio (contacto pode diferir ligeiramente)
       const aluno = alunos.find(a => a.num_socio === s.num_socio && a.contacto === s.contacto)
+              ?? alunos.find(a => a.num_socio === s.num_socio)
       const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
       const contaHoras = !!aluno?.convertido && !!tipo?.conta_para_nivel
 
       let valorCalculado: number | null = s.valor_calculado
-      if (tipo?.categoria === 'avaliacao') {
-        valorCalculado = tipo.valor_fixo ?? 0
-      } else if (tipo?.id === 'mi') {
+
+      if (s.num_socio === 'MI' || tipo?.id === 'mi') {
+        // MI standalone — rep.valor_fixo × ceil(horas)
         const valorRep = repTipo?.valor_fixo ?? 0
-        valorCalculado = valorRep * Math.ceil((tipo.duracao_min ?? 60) / 60)
+        const duracaoMin = tipo?.duracao_min ?? 60
+        valorCalculado = valorRep * Math.ceil(duracaoMin / 60)
+      } else if (tipo?.categoria === 'avaliacao') {
+        valorCalculado = tipo.valor_fixo ?? 0
       } else if (tipo?.categoria === 'treino' && aluno?.convertido) {
         const durSessao = (tipo.duracao_min ?? 60) / 60
         const horasMes = horasAcumuladas + durSessao
         const nivel = niveis
           .filter(n => horasMes >= n.horas_min && (n.horas_max == null || horasMes < n.horas_max))
           .pop()
-        if (nivel) valorCalculado = tipo.duracao_min === 45 ? nivel.valor_45min : nivel.valor_60min
+        if (nivel) valorCalculado = (tipo.duracao_min ?? 60) <= 45 ? nivel.valor_45min : nivel.valor_60min
       }
 
       if (contaHoras) horasAcumuladas += (tipo?.duracao_min ?? 0) / 60
 
       await supabase.from('sessoes').update({ valor_calculado: valorCalculado, conta_horas: contaHoras }).eq('id', s.id)
+      atualizadas++
     }
+
+    // Sync o briefing com os novos valores
+    const { data: seFrescos } = await supabase.from('sessoes').select('*').order('data_sessao', { ascending: false })
+    const { data: brFrescos } = await supabase.from('briefings').select('*').order('id', { ascending: false })
+    await sincronizarBriefingsAbertos((seFrescos as Sessao[]) || [], tiposSessao, (brFrescos as Briefing[]) || [])
+
+    console.log(`Recalcular ${briefingId}: ${atualizadas} sessões actualizadas`)
     load()
   }
 
