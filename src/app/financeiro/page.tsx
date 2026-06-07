@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { supabase, Briefing, Sessao, SsTrimestral, BonusTrimestral, EstadoBriefing, Aluno, TipoSessaoRow, ConfigBonus } from '@/lib/supabase'
+import { useEffect, useState, useMemo } from 'react'
+import { supabase, Briefing, Sessao, SsTrimestral, BonusTrimestral, EstadoBriefing, Aluno, TipoSessaoRow, ConfigBonus, ServicoPT } from '@/lib/supabase'
 
 function fmt(v: number | null) {
   if (v == null) return '—'
@@ -45,6 +45,7 @@ export default function FinanceiroPage() {
   const [configBonus, setConfigBonus] = useState<ConfigBonus[]>([])
   const [alunos, setAlunos] = useState<Aluno[]>([])
   const [tiposSessao, setTiposSessao] = useState<TipoSessaoRow[]>([])
+  const [servicosPT, setServicosPT] = useState<ServicoPT[]>([])
   const [loading, setLoading] = useState(true)
   const [mesSelecionado, setMesSelecionado] = useState<string | null>(null)
   const [taxaIrs, setTaxaIrs] = useState(0.115)
@@ -57,7 +58,7 @@ export default function FinanceiroPage() {
 
   async function load() {
     setLoading(true)
-    const [{ data: br }, { data: se }, { data: ssd }, { data: bon }, { data: cf }, { data: ssAtual }, { data: al }, { data: ts }, { data: cb }] = await Promise.all([
+    const [{ data: br }, { data: se }, { data: ssd }, { data: bon }, { data: cf }, { data: ssAtual }, { data: al }, { data: ts }, { data: cb }, { data: sp }] = await Promise.all([
       supabase.from('briefings').select('*').order('id', { ascending: false }),
       supabase.from('sessoes').select('*').order('data_sessao', { ascending: false }),
       supabase.from('ss_trimestral').select('*').order('ano_referencia', { ascending: false }),
@@ -67,6 +68,7 @@ export default function FinanceiroPage() {
       supabase.from('alunos').select('*').order('nome'),
       supabase.from('tipos_sessao').select('*').order('id'),
       supabase.from('config_bonus').select('*').order('horas_threshold'),
+      supabase.from('servicos_pt').select('*').order('nome'),
     ])
     setBriefings((br as Briefing[]) || [])
     setSessoes((se as Sessao[]) || [])
@@ -75,6 +77,7 @@ export default function FinanceiroPage() {
     setAlunos((al as Aluno[]) || [])
     setTiposSessao((ts as TipoSessaoRow[]) || [])
     setConfigBonus((cb as ConfigBonus[]) || [])
+    setServicosPT((sp as ServicoPT[]) || [])
     if (cf) setTaxaIrs((cf as { taxa_irs: number }).taxa_irs)
     if (ssAtual) setSsMensal((ssAtual as SsTrimestral).contribuicao_mensal)
     setLoading(false)
@@ -145,14 +148,37 @@ export default function FinanceiroPage() {
     load()
   }
 
+  async function sincronizarBriefingsAbertos(sessoesAtuais: Sessao[], tiposAtuais: TipoSessaoRow[], briefingsAtuais: Briefing[]) {
+    const abertos = briefingsAtuais.filter(b => b.estado === 'aberto')
+    for (const b of abertos) {
+      const sessoesDoMes = sessoesAtuais.filter(s => s.mes_briefing === b.id && s.estado === 'realizada')
+      const bruto = Math.round(sessoesDoMes.reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0) * 100) / 100
+      const horas = Math.round(sessoesDoMes.filter(s => s.conta_horas).reduce((acc, s) => {
+        const t = tiposAtuais.find(x => x.id === s.tipo_sessao_id)
+        return acc + (t?.duracao_min ?? 0) / 60
+      }, 0) * 100) / 100
+      const irs = Math.round(bruto * taxaIrs * 100) / 100
+      const liquido = Math.round((bruto - irs - ssMensal) * 100) / 100
+      await supabase.from('briefings').update({ total_bruto: bruto, irs_retido: irs, ss_pagar: ssMensal, liquido, horas_contadas: horas }).eq('id', b.id)
+    }
+  }
+
   async function eliminarSessao(id: string) {
     await supabase.from('sessoes').delete().eq('id', id)
+    const { data: se } = await supabase.from('sessoes').select('*').order('data_sessao', { ascending: false })
+    const sessoesAtuais = (se as Sessao[]) || []
+    setSessoes(sessoesAtuais)
+    await sincronizarBriefingsAbertos(sessoesAtuais, tiposSessao, briefings)
     load()
   }
 
   async function toggleEstadoSessao(sessao: Sessao) {
     const novoEstado = sessao.estado === 'realizada' ? 'nao_realizada' : 'realizada'
     await supabase.from('sessoes').update({ estado: novoEstado }).eq('id', sessao.id)
+    const { data: se } = await supabase.from('sessoes').select('*').order('data_sessao', { ascending: false })
+    const sessoesAtuais = (se as Sessao[]) || []
+    setSessoes(sessoesAtuais)
+    await sincronizarBriefingsAbertos(sessoesAtuais, tiposSessao, briefings)
     load()
   }
 
@@ -187,6 +213,12 @@ export default function FinanceiroPage() {
     let valorCalculado: number | null = null
     if (tipo?.categoria === 'avaliacao') {
       valorCalculado = tipo.valor_fixo ?? 0
+    } else if (tipo?.id === 'mi') {
+      // MI: valor igual ao de rep, por hora (meia hora conta como 1 hora)
+      const repTipo = tiposSessao.find(t => t.id === 'rep')
+      const valorRep = repTipo?.valor_fixo ?? 0
+      const horas = Math.ceil((tipo.duracao_min ?? 60) / 60)
+      valorCalculado = valorRep * horas
     } else if (tipo?.categoria === 'treino' && aluno?.convertido) {
       const { data: niveis } = await supabase.from('niveis_remuneracao').select('*').order('horas_min')
       const sessoesDoMes = sessoes.filter(s => s.mes_briefing === mesBriefing && s.conta_horas && s.estado === 'realizada')
@@ -211,6 +243,9 @@ export default function FinanceiroPage() {
       conta_horas: contaHoras,
       valor_calculado: valorCalculado,
     })
+    const { data: se } = await supabase.from('sessoes').select('*').order('data_sessao', { ascending: false })
+    const sessoesAtuais = (se as Sessao[]) || []
+    await sincronizarBriefingsAbertos(sessoesAtuais, tiposSessao, briefings)
     setNovasSessao(false)
     setSaving(false)
     load()
@@ -241,6 +276,24 @@ export default function FinanceiroPage() {
     acc[s.mes_briefing].push(s)
     return acc
   }, {})
+
+  // Valores ao vivo para briefings abertos (recalculados a partir das sessões actuais)
+  const liveValores = useMemo(() => {
+    const map: Record<string, { bruto: number; horas: number; irs: number; liquido: number }> = {}
+    for (const b of briefings) {
+      if (b.estado !== 'aberto') continue
+      const sessoesDoMes = sessoes.filter(s => s.mes_briefing === b.id && s.estado === 'realizada')
+      const bruto = Math.round(sessoesDoMes.reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0) * 100) / 100
+      const horas = Math.round(sessoesDoMes.filter(s => s.conta_horas).reduce((acc, s) => {
+        const t = tiposSessao.find(x => x.id === s.tipo_sessao_id)
+        return acc + (t?.duracao_min ?? 0) / 60
+      }, 0) * 100) / 100
+      const irs = Math.round(bruto * taxaIrs * 100) / 100
+      const liquido = Math.round((bruto - irs - ssMensal) * 100) / 100
+      map[b.id] = { bruto, horas, irs, liquido }
+    }
+    return map
+  }, [briefings, sessoes, tiposSessao, taxaIrs, ssMensal])
 
   const alunoSelecionado = alunos.find(a => a.num_socio === formSessao.num_socio && a.contacto === formSessao.contacto)
 
@@ -276,7 +329,17 @@ export default function FinanceiroPage() {
               <select value={`${formSessao.num_socio}|${formSessao.contacto}`}
                 onChange={(e) => {
                   const [num_socio, contacto] = e.target.value.split('|')
-                  setFormSessao({ ...formSessao, num_socio, contacto })
+                  const aluno = alunos.find(a => a.num_socio === num_socio && a.contacto === contacto)
+                  let tipo_sessao_id = formSessao.tipo_sessao_id
+                  if (aluno?.plano_pt) {
+                    const sv = servicosPT.find(s => s.nome === aluno.plano_pt)
+                    if (sv?.duracao_min) {
+                      const match = tiposSessao.find(t => t.categoria === 'treino' && t.duracao_min === sv.duracao_min)
+                      if (match) tipo_sessao_id = match.id
+                      else tipo_sessao_id = sv.duracao_min <= 45 ? 'treino_45' : 'treino_60'
+                    }
+                  }
+                  setFormSessao({ ...formSessao, num_socio, contacto, tipo_sessao_id })
                 }}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="|">Seleccionar aluno...</option>
@@ -385,10 +448,21 @@ export default function FinanceiroPage() {
                     </div>
 
                     <div className="mt-3 grid grid-cols-4 gap-3">
-                      <FinRow label="Bruto" value={fmt(b.total_bruto)} />
-                      <FinRow label={`IRS ${(taxaIrs * 100).toFixed(1)}%`} value={`-${fmt(b.irs_retido)}`} negative />
-                      <FinRow label="SS" value={`-${fmt(b.ss_pagar)}`} negative />
-                      <FinRow label="Líquido" value={fmt(b.liquido)} highlight />
+                      {(() => {
+                        const live = liveValores[b.id]
+                        const bruto = live ? live.bruto : b.total_bruto
+                        const irs = live ? live.irs : b.irs_retido
+                        const ss = b.ss_pagar
+                        const liquido = live ? live.liquido : b.liquido
+                        const horas = live ? live.horas : b.horas_contadas
+                        return <>
+                          <FinRow label={`Bruto${live ? ' ●' : ''}`} value={fmt(bruto)} />
+                          <FinRow label={`IRS ${(taxaIrs * 100).toFixed(1)}%`} value={`-${fmt(irs)}`} negative />
+                          <FinRow label="SS" value={`-${fmt(ss)}`} negative />
+                          <FinRow label="Líquido" value={fmt(liquido)} highlight />
+                          <FinRow label={`Horas${live ? ' ●' : ''}`} value={horas != null ? `${horas}h` : '—'} />
+                        </>
+                      })()}
                     </div>
 
                     <button onClick={() => setMesSelecionado(mesSelecionado === b.id ? null : b.id)}
@@ -406,7 +480,7 @@ export default function FinanceiroPage() {
                           return (
                             <div key={s.id} className={`flex items-center gap-2 rounded-xl px-3 py-2 ${naoRealizada ? 'bg-red-50 text-gray-400' : 'bg-white border border-gray-100 text-gray-700'}`}>
                               <span className={`flex-1 text-sm ${naoRealizada ? 'line-through' : ''}`}>
-                                {s.data_sessao} · {tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id}
+                                {s.data_sessao} · {alunos.find(a => a.num_socio === s.num_socio && a.contacto === s.contacto)?.nome ?? s.num_socio} · {tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id}
                                 {s.conta_horas && <span className="ml-1 text-xs text-blue-600 font-medium">⏱</span>}
                               </span>
                               <span className="font-semibold text-sm">{fmt(s.valor_calculado)}</span>

@@ -25,6 +25,7 @@ export default function BriefingPage() {
   const [semPlano, setSemPlano] = useState<Aluno[]>([])
   const [briefingAberto, setBriefingAberto] = useState(false)
   const [sessoesHoje, setSessoesHoje] = useState<(Sessao & { nome?: string })[]>([])
+  const [sessoesSemana, setSessoesSemana] = useState<(Sessao & { nome?: string })[]>([])
   const [avaliacoesAmanha, setAvaliacoesAmanha] = useState<(Sessao & { nome?: string })[]>([])
   const [tiposSessao, setTiposSessao] = useState<TipoSessaoRow[]>([])
   const [stats, setStats] = useState({ totalAlunos: 0, convertidos: 0, semPlanoTotal: 0 })
@@ -36,13 +37,15 @@ export default function BriefingPage() {
     setLoading(true)
     const hoje = new Date().toISOString().slice(0, 10)
     const amanha = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+    const fimSemana = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
     const cutoff = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10)
-    const [{ data: t }, { data: a }, { data: b }, { data: sh }, { data: sa }, { data: ts }, { data: allAlunos }, { data: alunosPT }, { data: svs }, { data: nvs }, { data: fc }, { data: ssData }] = await Promise.all([
+    const [{ data: t }, { data: a }, { data: b }, { data: sh }, { data: sa }, { data: sw }, { data: ts }, { data: allAlunos }, { data: alunosPT }, { data: svs }, { data: nvs }, { data: fc }, { data: ssData }] = await Promise.all([
       supabase.from('v_tarefas_hoje').select('*').order('data_prevista'),
       supabase.from('alunos').select('*').is('plano_confirmado_em', null).lt('ultima_avaliacao', cutoff).eq('estado', 'ativo'),
       supabase.from('briefings').select('*').eq('estado', 'aberto'),
       supabase.from('sessoes').select('*, alunos(nome)').eq('data_sessao', hoje),
       supabase.from('sessoes').select('*, alunos(nome)').eq('data_sessao', amanha),
+      supabase.from('sessoes').select('*, alunos(nome)').gt('data_sessao', hoje).lte('data_sessao', fimSemana).order('data_sessao'),
       supabase.from('tipos_sessao').select('*'),
       supabase.from('alunos').select('convertido, plano_confirmado_em, estado'),
       supabase.from('alunos').select('*').eq('convertido', true).eq('estado', 'ativo'),
@@ -55,6 +58,7 @@ export default function BriefingPage() {
     setSemPlano((a as Aluno[]) || [])
     setBriefingAberto(!!b?.length && new Date().getDate() > 5)
     setSessoesHoje(((sh as (Sessao & { alunos?: { nome: string } })[]) || []).map(s => ({ ...s, nome: s.alunos?.nome })))
+    setSessoesSemana(((sw as (Sessao & { alunos?: { nome: string } })[]) || []).map(s => ({ ...s, nome: s.alunos?.nome })))
     const tsData = (ts as TipoSessaoRow[]) || []
     setTiposSessao(tsData)
     const avalIds = new Set(tsData.filter(x => x.categoria === 'avaliacao').map(x => x.id))
@@ -223,6 +227,32 @@ export default function BriefingPage() {
                   </div>
                   {s.conta_horas && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">⏱</span>}
                   <span className="font-semibold text-sm text-gray-900">{fmt(s.valor_calculado)}</span>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* SESSÕES DESTA SEMANA */}
+      {sessoesSemana.length > 0 && (
+        <section>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">📆 Sessões desta semana</p>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-100">
+            {sessoesSemana.map(s => {
+              const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
+              const semValor = !s.valor_calculado || s.valor_calculado === 0
+              return (
+                <div key={s.id} className="px-3 py-2.5 flex items-center gap-2.5">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm text-gray-900 leading-tight">{s.nome ?? `Nº ${s.num_socio}`}</p>
+                    <p className="text-xs text-gray-400">{s.data_sessao} · {tipo?.nome ?? s.tipo_sessao_id}</p>
+                  </div>
+                  {s.conta_horas && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">⏱</span>}
+                  {semValor
+                    ? <span className="text-xs text-gray-400 font-medium">Sem valor</span>
+                    : <span className="font-semibold text-sm text-gray-900">{fmt(s.valor_calculado)}</span>
+                  }
                 </div>
               )
             })}
