@@ -165,20 +165,24 @@ export default function FinanceiroPage() {
 
   async function eliminarSessao(id: string) {
     await supabase.from('sessoes').delete().eq('id', id)
-    const { data: se } = await supabase.from('sessoes').select('*').order('data_sessao', { ascending: false })
+    const [{ data: se }, { data: brFrescos }] = await Promise.all([
+      supabase.from('sessoes').select('*').order('data_sessao', { ascending: false }),
+      supabase.from('briefings').select('*').order('id', { ascending: false }),
+    ])
     const sessoesAtuais = (se as Sessao[]) || []
-    setSessoes(sessoesAtuais)
-    await sincronizarBriefingsAbertos(sessoesAtuais, tiposSessao, briefings)
+    await sincronizarBriefingsAbertos(sessoesAtuais, tiposSessao, (brFrescos as Briefing[]) || [])
     load()
   }
 
   async function toggleEstadoSessao(sessao: Sessao) {
     const novoEstado = sessao.estado === 'realizada' ? 'nao_realizada' : 'realizada'
     await supabase.from('sessoes').update({ estado: novoEstado }).eq('id', sessao.id)
-    const { data: se } = await supabase.from('sessoes').select('*').order('data_sessao', { ascending: false })
+    const [{ data: se }, { data: brFrescos }] = await Promise.all([
+      supabase.from('sessoes').select('*').order('data_sessao', { ascending: false }),
+      supabase.from('briefings').select('*').order('id', { ascending: false }),
+    ])
     const sessoesAtuais = (se as Sessao[]) || []
-    setSessoes(sessoesAtuais)
-    await sincronizarBriefingsAbertos(sessoesAtuais, tiposSessao, briefings)
+    await sincronizarBriefingsAbertos(sessoesAtuais, tiposSessao, (brFrescos as Briefing[]) || [])
     load()
   }
 
@@ -208,7 +212,7 @@ export default function FinanceiroPage() {
       await supabase.from('briefings').insert({ id: mesBriefing, ano: d.getFullYear(), mes: d.getMonth() + 1, estado: 'aberto', total_bruto: 0, irs_retido: 0, ss_pagar: ssMensal, liquido: 0, horas_contadas: 0 })
     }
 
-    const contaHoras = !!aluno?.convertido && tipo?.conta_para_nivel === true
+    const contaHoras = !!aluno?.convertido && !!tipo?.conta_para_nivel
 
     let valorCalculado: number | null = null
     if (tipo?.categoria === 'avaliacao') {
@@ -243,9 +247,14 @@ export default function FinanceiroPage() {
       conta_horas: contaHoras,
       valor_calculado: valorCalculado,
     })
-    const { data: se } = await supabase.from('sessoes').select('*').order('data_sessao', { ascending: false })
+    // Buscar estado fresco para sincronizar (evita stale closure em briefings)
+    const [{ data: se }, { data: brFrescos }] = await Promise.all([
+      supabase.from('sessoes').select('*').order('data_sessao', { ascending: false }),
+      supabase.from('briefings').select('*').order('id', { ascending: false }),
+    ])
     const sessoesAtuais = (se as Sessao[]) || []
-    await sincronizarBriefingsAbertos(sessoesAtuais, tiposSessao, briefings)
+    const briefingsFrescos = (brFrescos as Briefing[]) || []
+    await sincronizarBriefingsAbertos(sessoesAtuais, tiposSessao, briefingsFrescos)
     setNovasSessao(false)
     setSaving(false)
     load()
