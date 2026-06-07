@@ -19,7 +19,8 @@ const TIPOS_SESSAO_PT = ['treino_60', 'treino_45', 'sw'];
 
 // Tipos standalone — sem aluno associado (título é apenas o código)
 // Duração calculada pela hora início/fim do evento
-const TIPOS_STANDALONE = ['mi'];
+// n1-n6: aulas de natação por nível
+const TIPOS_STANDALONE = ['mi', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6'];
 
 // Tipos de avaliação/prospeção — identificam também o tipo de aluno
 // Formato: "rep Nome - NumSocio"  ou  "oi Nome - NumSocio"
@@ -270,15 +271,20 @@ function registarSessaoStandalone(tipoSessaoId, dataEvento, horaInicio, duracaoM
 
   const tipoInfo = tipos.find(t => t.id === tipoSessaoId);
 
-  // Calcular valor: rep.valor_fixo × ceil(duracaoMin / 60)
   let valorCalculado = null;
   if (tipoSessaoId === 'mi') {
+    // MI: rep.valor_fixo × ceil(duração real / 60)
     const repTipo  = tipos.find(t => t.id === 'rep');
     const valorRep = repTipo ? (repTipo.valor_fixo || 0) : 0;
     const horas    = Math.ceil(duracaoMin / 60);
     valorCalculado = valorRep * horas;
   } else if (tipoInfo && tipoInfo.valor_fixo != null) {
+    // Natação (n1-n6) e outros: valor fixo configurado no tipo de sessão
     valorCalculado = tipoInfo.valor_fixo;
+  } else if (tipoInfo && tipoInfo.categoria === 'treino' && nivelAtual) {
+    // Fallback: usar nivel actual se não tiver valor_fixo
+    const dur = tipoInfo.duracao_min || duracaoMin;
+    valorCalculado = dur <= 45 ? nivelAtual.valor_45min : nivelAtual.valor_60min;
   }
 
   const payload = {
