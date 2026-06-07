@@ -96,28 +96,25 @@ export default function FinanceiroPage() {
     if (briefing.estado === 'aberto') {
       const sessoesDoMes = sessoes.filter(s => s.mes_briefing === briefing.id && s.estado === 'realizada')
       const bruto = sessoesDoMes.reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0)
-      const horas = sessoesDoMes.reduce((acc, s) => {
-        const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
-        if (!tipo?.conta_para_nivel) return acc
-        return acc + (tipo.duracao_min ?? 0) / 60
-      }, 0)
+      // Horas = planos vendidos este mês (não sessões reais)
+      const horas = horasPlanoMensal
       const irs = bruto * taxaIrs
       const liquido = bruto - irs - ssMensal
       const trim = Math.ceil(briefing.mes / 3)
-      // Último mês do trimestre (3, 6, 9, 12) — calcular bónus automaticamente
+      // Último mês do trimestre — calcular bónus com horas de plano do trimestre
       if (briefing.mes % 3 === 0 && configBonus.length > 0) {
-        const sessTrimestre = sessoes.filter(s => {
-          if (!s.mes_briefing || s.estado !== 'realizada') return false
-          const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
-          if (!tipo?.conta_para_nivel) return false
-          const [a, m] = s.mes_briefing.split('-').map(Number)
-          return a === briefing.ano && Math.ceil(m / 3) === trim
+        // Soma horas_contadas dos briefings fechados do mesmo trimestre + mês actual
+        const mesesDoTrim = [1, 2, 3].map(i => {
+          const m = (trim - 1) * 3 + i
+          return `${briefing.ano}-${String(m).padStart(2, '0')}`
         })
-        const horasTrim = Math.round(sessTrimestre.reduce((acc, s) => {
-          const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
-          if (!tipo?.conta_para_nivel) return acc
-          return acc + (tipo.duracao_min ?? 0) / 60
-        }, 0) * 100) / 100
+        const horasTrim = Math.round(
+          mesesDoTrim.reduce((acc, mes) => {
+            if (mes === briefing.id) return acc + horasPlanoMensal
+            const br = briefings.find(b => b.id === mes)
+            return acc + (br?.horas_contadas || 0)
+          }, 0) * 100
+        ) / 100
         // Regra com maior threshold atingido
         const regraAtingida = [...configBonus]
           .sort((a, b) => b.horas_threshold - a.horas_threshold)
@@ -152,19 +149,15 @@ export default function FinanceiroPage() {
     load()
   }
 
-  async function sincronizarBriefingsAbertos(sessoesAtuais: Sessao[], tiposAtuais: TipoSessaoRow[], briefingsAtuais: Briefing[]) {
+  async function sincronizarBriefingsAbertos(sessoesAtuais: Sessao[], _tiposAtuais: TipoSessaoRow[], briefingsAtuais: Briefing[]) {
     const abertos = briefingsAtuais.filter(b => b.estado === 'aberto')
     for (const b of abertos) {
       const sessoesDoMes = sessoesAtuais.filter(s => s.mes_briefing === b.id && s.estado === 'realizada')
       const bruto = Math.round(sessoesDoMes.reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0) * 100) / 100
-      const horas = Math.round(sessoesDoMes.reduce((acc, s) => {
-        const t = tiposAtuais.find(x => x.id === s.tipo_sessao_id)
-        if (!t?.conta_para_nivel) return acc
-        return acc + (t.duracao_min ?? 0) / 60
-      }, 0) * 100) / 100
       const irs = Math.round(bruto * taxaIrs * 100) / 100
       const liquido = Math.round((bruto - irs - ssMensal) * 100) / 100
-      await supabase.from('briefings').update({ total_bruto: bruto, irs_retido: irs, ss_pagar: ssMensal, liquido, horas_contadas: horas }).eq('id', b.id)
+      // horas = planos vendidos (não sessões reais)
+      await supabase.from('briefings').update({ total_bruto: bruto, irs_retido: irs, ss_pagar: ssMensal, liquido, horas_contadas: horasPlanoMensal }).eq('id', b.id)
     }
   }
 
@@ -303,19 +296,38 @@ export default function FinanceiroPage() {
     load()
   }
 
-  // Progresso bónus trimestre atual
+  // Horas mensais dos planos vendidos (alunos PT activos)
+  const horasPlanoMensal = useMemo(() => {
+    return Math.round(
+      alunos
+        .filter(a => a.convertido && a.estado === 'ativo')
+        .reduce((acc, a) => {
+          const sv = servicosPT.find(s => s.nome === a.plano_pt)
+          if (sv) {
+            const dur = (sv.duracao_min ?? 60) / 60
+            const sessoesSemana = sv.sessoes_semana || 1
+            const mult = sv.tipo === 'semanal' ? 4.33 : 1
+            return acc + sessoesSemana * mult * dur
+          }
+          return acc + (a.horas_pt_mensais || 0)
+        }, 0) * 100
+    ) / 100
+  }, [alunos, servicosPT])
+
+  // Progresso bónus trimestre atual — horas = planos vendidos por mês com briefing
   const hoje = new Date()
   const trimAtual = Math.ceil((hoje.getMonth() + 1) / 3)
   const anoAtual = hoje.getFullYear()
   const mesInicio = (trimAtual - 1) * 3 + 1
   const mesesTrim = [mesInicio, mesInicio + 1, mesInicio + 2].map(m => `${anoAtual}-${String(m).padStart(2, '0')}`)
-  const horasTrimAtual = Math.round(sessoes.filter(s =>
-    s.mes_briefing && mesesTrim.includes(s.mes_briefing) && s.estado === 'realizada'
-  ).reduce((acc, s) => {
-    const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
-    if (!tipo?.conta_para_nivel) return acc
-    return acc + (tipo.duracao_min ?? 0) / 60
-  }, 0) * 10) / 10
+  const horasTrimAtual = Math.round(
+    mesesTrim.reduce((acc, mes) => {
+      const br = briefings.find(b => b.id === mes)
+      if (!br) return acc
+      // Briefing fechado: usar horas_contadas gravadas; aberto: usar plano actual
+      return acc + (br.estado !== 'aberto' ? (br.horas_contadas || 0) : horasPlanoMensal)
+    }, 0) * 10
+  ) / 10
   const melhorRegraAtingida = [...configBonus]
     .sort((a, b) => b.horas_threshold - a.horas_threshold)
     .find(cb => horasTrimAtual >= cb.horas_threshold && (cb.horas_max == null || horasTrimAtual <= cb.horas_max))
@@ -330,24 +342,20 @@ export default function FinanceiroPage() {
     return acc
   }, {})
 
-  // Valores ao vivo para briefings abertos (recalculados a partir das sessões actuais)
+  // Valores ao vivo para briefings abertos
+  // bruto = soma dos valor_calculado das sessões; horas = plano mensal vendido
   const liveValores = useMemo(() => {
     const map: Record<string, { bruto: number; horas: number; irs: number; liquido: number }> = {}
     for (const b of briefings) {
       if (b.estado !== 'aberto') continue
       const sessoesDoMes = sessoes.filter(s => s.mes_briefing === b.id && s.estado === 'realizada')
       const bruto = Math.round(sessoesDoMes.reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0) * 100) / 100
-      const horas = Math.round(sessoesDoMes.reduce((acc, s) => {
-        const t = tiposSessao.find(x => x.id === s.tipo_sessao_id)
-        if (!t?.conta_para_nivel) return acc
-        return acc + (t.duracao_min ?? 0) / 60
-      }, 0) * 100) / 100
       const irs = Math.round(bruto * taxaIrs * 100) / 100
       const liquido = Math.round((bruto - irs - ssMensal) * 100) / 100
-      map[b.id] = { bruto, horas, irs, liquido }
+      map[b.id] = { bruto, horas: horasPlanoMensal, irs, liquido }
     }
     return map
-  }, [briefings, sessoes, tiposSessao, taxaIrs, ssMensal])
+  }, [briefings, sessoes, horasPlanoMensal, taxaIrs, ssMensal])
 
   const alunoSelecionado = alunos.find(a => a.num_socio === formSessao.num_socio && a.contacto === formSessao.contacto)
 
