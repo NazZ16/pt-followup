@@ -65,8 +65,7 @@ function syncCalendarToSupabase() {
 // ============================================================
 function sincronizarDesde1Junho() {
   const inicio = new Date('2026-06-01T00:00:00');
-  const fim = new Date();
-  fim.setDate(fim.getDate() + JANELA_DIAS_DEPOIS);
+  const fim = new Date(); // apenas até hoje
   sincronizarPeriodo(inicio, fim);
   Logger.log('Backfill desde 1 de junho concluído.');
 }
