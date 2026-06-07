@@ -256,13 +256,9 @@ function procurarAluno(parsed) {
 // Duração vem do evento do calendário
 // ============================================================
 function registarSessaoStandalone(tipoSessaoId, dataEvento, horaInicio, duracaoMin, nivelAtual, tipos) {
-  // Garantir que existe um aluno placeholder para sessões sem aluno (FK constraint)
-  supabaseFetch('/rest/v1/alunos', 'POST', {
-    num_socio: 'MI', contacto: '', nome: 'Marcação Interna',
-    tipo: 'rep', convertido: false, estado: 'inativo',
-    atualizado_em: new Date().toISOString(),
-  }, { 'Prefer': 'resolution=merge-duplicates,return=minimal' });
-    '/rest/v1/sessoes?num_socio=eq.MI&data_sessao=eq.' + dataEvento +
+  // Verificar se já existe
+  const existente = supabaseFetch(
+    '/rest/v1/sessoes?num_socio=is.null&data_sessao=eq.' + dataEvento +
     '&tipo_sessao_id=eq.' + tipoSessaoId + '&select=id',
     'GET'
   );
@@ -286,8 +282,6 @@ function registarSessaoStandalone(tipoSessaoId, dataEvento, horaInicio, duracaoM
   }
 
   const payload = {
-    num_socio:         'MI',
-    contacto:          '',
     tipo_sessao_id:    tipoSessaoId,
     data_sessao:       dataEvento,
     hora_inicio:       horaInicio || null,

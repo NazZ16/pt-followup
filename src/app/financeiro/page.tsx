@@ -559,7 +559,7 @@ export default function FinanceiroPage() {
                           return (
                             <div key={s.id} className={`flex items-center gap-2 rounded-xl px-3 py-2 ${naoRealizada ? 'bg-red-50 text-gray-400' : 'bg-white border border-gray-100 text-gray-700'}`}>
                               <span className={`flex-1 text-sm ${naoRealizada ? 'line-through' : ''}`}>
-                                {s.data_sessao} · {alunos.find(a => a.num_socio === s.num_socio && a.contacto === s.contacto)?.nome ?? s.num_socio} · {tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id}
+                                {s.data_sessao} · {s.num_socio ? (alunos.find(a => a.num_socio === s.num_socio && a.contacto === s.contacto)?.nome ?? s.num_socio) : (tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id)} {s.num_socio ? ('· ' + (tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id)) : ''}
                                 {s.conta_horas && <span className="ml-1 text-xs text-blue-600 font-medium">⏱</span>}
                               </span>
                               <span className="font-semibold text-sm">{fmt(s.valor_calculado)}</span>

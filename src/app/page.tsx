@@ -222,7 +222,7 @@ export default function BriefingPage() {
                     {realizada ? '✓' : ''}
                   </button>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-gray-900 leading-tight">{s.nome ?? `Nº ${s.num_socio}`}</p>
+                    <p className="font-semibold text-sm text-gray-900 leading-tight">{s.nome ?? (s.num_socio ? `Nº ${s.num_socio}` : tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id)}</p>
                     <p className="text-xs text-gray-400">{tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id}</p>
                   </div>
                   {s.conta_horas && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">⏱</span>}
@@ -245,7 +245,7 @@ export default function BriefingPage() {
               return (
                 <div key={s.id} className="px-3 py-2.5 flex items-center gap-2.5">
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-gray-900 leading-tight">{s.nome ?? `Nº ${s.num_socio}`}</p>
+                    <p className="font-semibold text-sm text-gray-900 leading-tight">{s.nome ?? (s.num_socio ? `Nº ${s.num_socio}` : tipo?.nome ?? s.tipo_sessao_id)}</p>
                     <p className="text-xs text-gray-400">{s.data_sessao} · {tipo?.nome ?? s.tipo_sessao_id}</p>
                   </div>
                   {s.conta_horas && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">⏱</span>}
