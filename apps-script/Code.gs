@@ -15,7 +15,11 @@ const JANELA_DIAS_DEPOIS = 30;
 
 // Tipos de sessão de treino PT — mapeados directamente para tipo_sessao_id
 // Formato no calendário: "treino_60 Nome - NumSocio"  ou  "treino_60 Nome"
-const TIPOS_SESSAO_PT = ['treino_60', 'treino_45', 'mi', 'sw'];
+const TIPOS_SESSAO_PT = ['treino_60', 'treino_45', 'sw'];
+
+// Tipos standalone — sem aluno associado (título é apenas o código)
+// Duração calculada pela hora início/fim do evento
+const TIPOS_STANDALONE = ['mi'];
 
 // Tipos de avaliação/prospeção — identificam também o tipo de aluno
 // Formato: "rep Nome - NumSocio"  ou  "oi Nome - NumSocio"
@@ -82,12 +86,23 @@ function sincronizarPeriodo(inicio, fim) {
     const titulo = evento.getTitle().trim();
     if (titulo.toLowerCase().startsWith(PREFIXO_FOLLOWUP)) { ignorados++; return; }
 
-    const parsed = parsearEvento(titulo, evento.getDescription());
-    if (!parsed) { ignorados++; return; }
-
     const startTime  = evento.getStartTime();
+    const endTime    = evento.getEndTime();
     const dataEvento = Utilities.formatDate(startTime, Session.getScriptTimeZone(), 'yyyy-MM-dd');
     const horaInicio = Utilities.formatDate(startTime, Session.getScriptTimeZone(), 'HH:mm');
+    const duracaoMin = Math.round((endTime - startTime) / 60000); // duração em minutos
+
+    // Verificar se é evento standalone (ex: "mi")
+    const tituloLower = titulo.toLowerCase().trim();
+    const tipoStandalone = TIPOS_STANDALONE.find(t => tituloLower === t);
+    if (tipoStandalone) {
+      registarSessaoStandalone(tipoStandalone, dataEvento, horaInicio, duracaoMin, niveis, tipos);
+      processados++;
+      return;
+    }
+
+    const parsed = parsearEvento(titulo, evento.getDescription());
+    if (!parsed) { ignorados++; return; }
 
     if (parsed.categoria === 'avaliacao') {
       const aluno = upsertAluno(parsed, dataEvento);
@@ -232,6 +247,57 @@ function procurarAluno(parsed) {
   }
 
   return null;
+}
+
+// ============================================================
+// REGISTAR SESSÃO STANDALONE (sem aluno — ex: MI)
+// Duração vem do evento do calendário
+// ============================================================
+function registarSessaoStandalone(tipoSessaoId, dataEvento, horaInicio, duracaoMin, niveis, tipos) {
+  // Verificar se já existe
+  const existente = supabaseFetch(
+    '/rest/v1/sessoes?num_socio=eq.MI&data_sessao=eq.' + dataEvento +
+    '&tipo_sessao_id=eq.' + tipoSessaoId + '&select=id',
+    'GET'
+  );
+  if (existente && existente.length > 0) return;
+
+  const dataObj     = new Date(dataEvento + 'T12:00:00');
+  const mesBriefing = dataObj.getFullYear() + '-' + String(dataObj.getMonth() + 1).padStart(2, '0');
+  garantirBriefing(mesBriefing, dataObj.getFullYear(), dataObj.getMonth() + 1);
+
+  const tipoInfo = tipos.find(t => t.id === tipoSessaoId);
+
+  // Calcular valor: rep.valor_fixo × ceil(duracaoMin / 60)
+  let valorCalculado = null;
+  if (tipoSessaoId === 'mi') {
+    const repTipo  = tipos.find(t => t.id === 'rep');
+    const valorRep = repTipo ? (repTipo.valor_fixo || 0) : 0;
+    const horas    = Math.ceil(duracaoMin / 60);
+    valorCalculado = valorRep * horas;
+  } else if (tipoInfo && tipoInfo.valor_fixo != null) {
+    valorCalculado = tipoInfo.valor_fixo;
+  }
+
+  const payload = {
+    num_socio:         'MI',
+    contacto:          '',
+    tipo_sessao_id:    tipoSessaoId,
+    data_sessao:       dataEvento,
+    hora_inicio:       horaInicio || null,
+    estado:            'realizada',
+    mes_briefing:      mesBriefing,
+    incluida_briefing: false,
+    conta_horas:       false,
+    valor_calculado:   valorCalculado,
+  };
+
+  const resp = supabaseFetch('/rest/v1/sessoes', 'POST', payload, { 'Prefer': 'return=minimal' });
+  if (resp && resp.error) {
+    Logger.log('Erro sessão standalone: ' + JSON.stringify(resp));
+  } else {
+    Logger.log('Sessão MI: ' + dataEvento + ' | ' + duracaoMin + 'min | ' + valorCalculado + '€');
+  }
 }
 
 // ============================================================
