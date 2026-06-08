@@ -24,7 +24,6 @@ export default function BriefingPage() {
   const [mes, setMes] = useState<MesCorrente | null>(null)
   const [semPlano, setSemPlano] = useState<Aluno[]>([])
   const [briefingAberto, setBriefingAberto] = useState(false)
-  const [sessoesHoje, setSessoesHoje] = useState<(Sessao & { nome?: string })[]>([])
   const [sessoesSemana, setSessoesSemana] = useState<(Sessao & { nome?: string })[]>([])
   const [avaliacoesAmanha, setAvaliacoesAmanha] = useState<(Sessao & { nome?: string })[]>([])
   const [tiposSessao, setTiposSessao] = useState<TipoSessaoRow[]>([])
@@ -39,13 +38,13 @@ export default function BriefingPage() {
     const amanha = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
     const fimSemana = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
     const cutoff = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10)
-    const [{ data: t }, { data: a }, { data: b }, { data: sh }, { data: sa }, { data: sw }, { data: ts }, { data: allAlunos }, { data: alunosPT }, { data: svs }, { data: nvs }, { data: fc }, { data: ssData }] = await Promise.all([
+    const mesBriefing = hoje.slice(0, 7)
+    const [{ data: t }, { data: a }, { data: b }, { data: sa }, { data: sw }, { data: ts }, { data: allAlunos }, { data: alunosPT }, { data: svs }, { data: nvs }, { data: fc }, { data: ssData }, { data: sesMes }] = await Promise.all([
       supabase.from('v_tarefas_hoje').select('*').order('data_prevista'),
       supabase.from('alunos').select('*').is('plano_confirmado_em', null).lt('ultima_avaliacao', cutoff).eq('estado', 'ativo'),
       supabase.from('briefings').select('*').eq('estado', 'aberto'),
-      supabase.from('sessoes').select('*, alunos(nome)').eq('data_sessao', hoje),
       supabase.from('sessoes').select('*, alunos(nome)').eq('data_sessao', amanha),
-      supabase.from('sessoes').select('*, alunos(nome)').gt('data_sessao', hoje).lte('data_sessao', fimSemana).order('data_sessao'),
+      supabase.from('sessoes').select('*, alunos(nome)').gte('data_sessao', hoje).lte('data_sessao', fimSemana).order('data_sessao').order('hora_inicio'),
       supabase.from('tipos_sessao').select('*'),
       supabase.from('alunos').select('convertido, plano_confirmado_em, estado'),
       supabase.from('alunos').select('*').eq('convertido', true).eq('estado', 'ativo'),
@@ -53,11 +52,11 @@ export default function BriefingPage() {
       supabase.from('niveis_remuneracao').select('*').order('horas_min'),
       supabase.from('config_fiscal').select('*').order('vigente_desde', { ascending: false }).limit(1).maybeSingle(),
       supabase.from('ss_trimestral').select('*').order('ano_aplicacao', { ascending: false }).order('trimestre_aplicacao', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('sessoes').select('valor_calculado').eq('mes_briefing', mesBriefing).eq('estado', 'realizada'),
     ])
     setTarefas((t as TarefaHoje[]) || [])
     setSemPlano((a as Aluno[]) || [])
     setBriefingAberto(!!b?.length && new Date().getDate() > 5)
-    setSessoesHoje(((sh as (Sessao & { alunos?: { nome: string } })[]) || []).map(s => ({ ...s, nome: s.alunos?.nome })))
     setSessoesSemana(((sw as (Sessao & { alunos?: { nome: string } })[]) || []).map(s => ({ ...s, nome: s.alunos?.nome })))
     const tsData = (ts as TipoSessaoRow[]) || []
     setTiposSessao(tsData)
@@ -74,34 +73,31 @@ export default function BriefingPage() {
       semPlanoTotal: aa.filter(x => !x.plano_confirmado_em && x.estado === 'ativo').length,
     })
 
-    // Calcular mês em curso a partir dos planos PT activos
+    // Calcular mês em curso
     const aptivos = (alunosPT as Aluno[]) || []
     const servicosList = (svs as ServicoPT[]) || []
     const niveisList = (nvs as NivelRemuneracao[]) || []
     const taxaIrs = (fc as ConfigFiscal | null)?.taxa_irs ?? 0.1
     const ssMensal = (ssData as SsTrimestral | null)?.contribuicao_mensal ?? 0
 
-    const totalHoras = Math.round(aptivos.reduce((sum, a) => sum + (a.horas_pt_mensais || 0), 0) * 100) / 100
+    // Horas e nível baseados nos planos vendidos (igual ao financeiro)
+    const totalHoras = Math.round(aptivos.reduce((sum, al) => {
+      const sv = servicosList.find(s => s.nome === al.plano_pt)
+      if (sv) {
+        const dur = (sv.duracao_min ?? 60) / 60
+        const sessoes = sv.sessoes_semana || 1
+        const mult = sv.tipo === 'semanal' ? 4.33 : 1
+        return sum + sessoes * mult * dur
+      }
+      return sum + (al.horas_pt_mensais || 0)
+    }, 0) * 100) / 100
     const nivelAtual = [...niveisList].reverse().find(n =>
       totalHoras >= n.horas_min && (n.horas_max == null || totalHoras <= n.horas_max)
     ) ?? null
 
-    let bruto = 0
-    for (const aluno of aptivos) {
-      const sv = servicosList.find(s => s.nome === aluno.plano_pt)
-      if (!nivelAtual) continue
-      if (sv) {
-        const dur = sv.duracao_min ?? 60
-        const rate = dur <= 30 ? nivelAtual.valor_30min : dur <= 45 ? nivelAtual.valor_45min : nivelAtual.valor_60min
-        const sessoes = sv.sessoes_semana || 1
-        const multiplicador = sv.tipo === 'semanal' ? 4.33 : 1
-        bruto += sessoes * multiplicador * rate
-      } else {
-        // sem serviço associado: fallback horas × valor_60min
-        bruto += (aluno.horas_pt_mensais || 0) * nivelAtual.valor_60min
-      }
-    }
-    bruto = Math.round(bruto * 100) / 100
+    // Bruto real = soma do valor_calculado das sessões realizadas este mês (igual ao financeiro)
+    const bruto = Math.round(((sesMes as { valor_calculado: number | null }[]) || [])
+      .reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0) * 100) / 100
     const irsRetido = Math.round(bruto * taxaIrs * 100) / 100
     const liquido = Math.round((bruto - irsRetido - ssMensal) * 100) / 100
 
@@ -206,59 +202,53 @@ export default function BriefingPage() {
         </section>
       )}
 
-      {/* SESSÕES HOJE */}
-      {sessoesHoje.length > 0 && (
-        <section>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">🏋️ Sessões de hoje</p>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-100">
-            {sessoesHoje.map(s => {
-              const realizada = s.estado === 'realizada'
-              return (
-                <div key={s.id} className={`px-3 py-2.5 flex items-center gap-2.5 ${realizada ? '' : 'opacity-50'}`}>
-                  <button onClick={() => toggleSessao(s)}
-                    className={`w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-xs font-bold border-2 transition-colors ${
-                      realizada ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 text-gray-300 hover:border-emerald-400'
-                    }`}>
-                    {realizada ? '✓' : ''}
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-gray-900 leading-tight">{s.nome ?? (s.num_socio ? `Nº ${s.num_socio}` : tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id)}</p>
-                    <p className="text-xs text-gray-400">{tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id}</p>
+      {/* SESSÕES DA SEMANA (hoje + próximos 7 dias) */}
+      {sessoesSemana.length > 0 && (() => {
+        const hojeStr = new Date().toISOString().slice(0, 10)
+        const dias = Array.from(new Set(sessoesSemana.map(s => s.data_sessao)))
+        return (
+          <section>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">🏋️ Sessões da semana</p>
+            <div className="space-y-2">
+              {dias.map(dia => {
+                const isHoje = dia === hojeStr
+                const label = isHoje ? 'Hoje' : new Date(dia + 'T12:00:00').toLocaleDateString('pt-PT', { weekday: 'short', day: 'numeric', month: 'short' })
+                return (
+                  <div key={dia} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wide ${isHoje ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-500'}`}>{label}</div>
+                    {sessoesSemana.filter(s => s.data_sessao === dia).map(s => {
+                      const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
+                      const realizada = s.estado === 'realizada'
+                      const semValor = !s.valor_calculado || s.valor_calculado === 0
+                      return (
+                        <div key={s.id} className={`px-3 py-2.5 flex items-center gap-2.5 border-t border-gray-100 ${!realizada && isHoje ? 'opacity-60' : ''}`}>
+                          {isHoje && (
+                            <button onClick={() => toggleSessao(s)}
+                              className={`w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-xs font-bold border-2 transition-colors ${
+                                realizada ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 text-gray-300 hover:border-emerald-400'
+                              }`}>
+                              {realizada ? '✓' : ''}
+                            </button>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-sm text-gray-900 leading-tight">{s.nome ?? (s.num_socio ? `Nº ${s.num_socio}` : tipo?.nome ?? s.tipo_sessao_id)}</p>
+                            <p className="text-xs text-gray-400">{s.hora_inicio ? s.hora_inicio.slice(0, 5) + ' · ' : ''}{tipo?.nome ?? s.tipo_sessao_id}</p>
+                          </div>
+                          {s.conta_horas && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">⏱</span>}
+                          {semValor
+                            ? <span className="text-xs text-gray-400 font-medium">Sem valor</span>
+                            : <span className="font-semibold text-sm text-gray-900">{fmt(s.valor_calculado)}</span>
+                          }
+                        </div>
+                      )
+                    })}
                   </div>
-                  {s.conta_horas && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">⏱</span>}
-                  <span className="font-semibold text-sm text-gray-900">{fmt(s.valor_calculado)}</span>
-                </div>
-              )
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* SESSÕES DESTA SEMANA */}
-      {sessoesSemana.length > 0 && (
-        <section>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">📆 Sessões desta semana</p>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-100">
-            {sessoesSemana.map(s => {
-              const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
-              const semValor = !s.valor_calculado || s.valor_calculado === 0
-              return (
-                <div key={s.id} className="px-3 py-2.5 flex items-center gap-2.5">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-gray-900 leading-tight">{s.nome ?? (s.num_socio ? `Nº ${s.num_socio}` : tipo?.nome ?? s.tipo_sessao_id)}</p>
-                    <p className="text-xs text-gray-400">{s.data_sessao} · {tipo?.nome ?? s.tipo_sessao_id}</p>
-                  </div>
-                  {s.conta_horas && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">⏱</span>}
-                  {semValor
-                    ? <span className="text-xs text-gray-400 font-medium">Sem valor</span>
-                    : <span className="font-semibold text-sm text-gray-900">{fmt(s.valor_calculado)}</span>
-                  }
-                </div>
-              )
-            })}
-          </div>
-        </section>
-      )}
+                )
+              })}
+            </div>
+          </section>
+        )
+      })()}
 
       {/* HOJE */}
       <section>
