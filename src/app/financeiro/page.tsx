@@ -553,8 +553,8 @@ export default function FinanceiroPage() {
                   {mesSelecionado === b.id && (() => {
                     const todasSessoes = sessoesByMes[b.id] || []
                     const GRUPOS: { label: string; ids: string[] }[] = [
-                      { label: 'Treinos PT', ids: ['treino_60', 'treino_45', 'treino_30', 'sw'] },
-                      { label: 'Rep / Avaliação', ids: ['rep'] },
+                      { label: 'Treinos PT', ids: ['treino_60', 'treino_45', 'treino_30'] },
+                      { label: 'Rep / Avaliação', ids: ['rep', 'sw'] },
                       { label: 'OI', ids: ['oi'] },
                       { label: 'Treino Oferta', ids: ['treino_oferta'] },
                       { label: 'Natação', ids: ['n1','n2','n3','n4','n5','n6','n1f','n2f','n3f','n4f','n5f','n6f'] },
