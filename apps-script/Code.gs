@@ -104,7 +104,21 @@ function sincronizarPeriodo(inicio, fim) {
     }
 
     const parsed = parsearEvento(titulo, evento.getDescription());
-    if (!parsed) { ignorados++; return; }
+    if (!parsed) {
+      // Tentar match por nome com aluno PT activo
+      const alunoMatch = procurarAlunoPorNome(titulo);
+      if (alunoMatch) {
+        const tipoSessaoId = alunoMatch.duracao_min <= 45 ? 'treino_45' : 'treino_60';
+        registarSessaoComValor(
+          { tipoSessaoId, categoria: 'treino', tipoAluno: null, nome: alunoMatch.nome, numSocio: alunoMatch.num_socio, contacto: alunoMatch.contacto },
+          dataEvento, horaInicio, nivelAtual, tipos
+        );
+        processados++;
+      } else {
+        ignorados++;
+      }
+      return;
+    }
 
     if (parsed.categoria === 'avaliacao') {
       const aluno = upsertAluno(parsed, dataEvento);
@@ -248,6 +262,31 @@ function procurarAluno(parsed) {
     }
   }
 
+  return null;
+}
+
+// ============================================================
+// PROCURAR ALUNO PT ACTIVO POR NOME (para eventos sem código)
+// Retorna { num_socio, contacto, nome, duracao_min } ou null
+// ============================================================
+function procurarAlunoPorNome(titulo) {
+  const tituloNorm = titulo.toLowerCase().trim();
+  const alunosPT = supabaseFetch(
+    '/rest/v1/alunos?convertido=eq.true&estado=eq.ativo&select=num_socio,contacto,nome,plano_pt,horas_pt_mensais',
+    'GET'
+  ) || [];
+  const servicosPT = supabaseFetch('/rest/v1/servicos_pt?select=*', 'GET') || [];
+
+  for (const a of alunosPT) {
+    const nomeNorm = (a.nome || '').toLowerCase().trim();
+    // Match exacto ou se o titulo contém o nome completo
+    if (tituloNorm === nomeNorm || tituloNorm.includes(nomeNorm)) {
+      const sv = servicosPT.find(function(s) { return s.nome === a.plano_pt; });
+      const duracao_min = sv ? (sv.duracao_min || 60) : 60;
+      Logger.log('Match por nome PT: "' + titulo + '" → ' + a.nome + ' (' + duracao_min + 'min)');
+      return { num_socio: a.num_socio, contacto: a.contacto, nome: a.nome, duracao_min: duracao_min };
+    }
+  }
   return null;
 }
 
