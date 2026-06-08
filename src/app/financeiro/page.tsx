@@ -550,33 +550,60 @@ export default function FinanceiroPage() {
                     </div>
                   </div>
 
-                  {mesSelecionado === b.id && (
-                    <div className="border-t border-gray-100 bg-gray-50/50 p-3 space-y-1.5">
-                      {(sessoesByMes[b.id] || []).length === 0
-                        ? <p className="text-sm text-gray-400 py-1">Sem sessões registadas.</p>
-                        : (sessoesByMes[b.id] || []).map((s) => {
-                          const naoRealizada = s.estado !== 'realizada'
-                          return (
-                            <div key={s.id} className={`flex items-center gap-2 rounded-xl px-3 py-2 ${naoRealizada ? 'bg-red-50 text-gray-400' : 'bg-white border border-gray-100 text-gray-700'}`}>
-                              <span className={`flex-1 text-sm ${naoRealizada ? 'line-through' : ''}`}>
-                                {s.data_sessao} · {s.num_socio ? (alunos.find(a => a.num_socio === s.num_socio && a.contacto === s.contacto)?.nome ?? s.num_socio) : (tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id)} {s.num_socio ? ('· ' + (tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id)) : ''}
-                                {s.conta_horas && <span className="ml-1 text-xs text-blue-600 font-medium">⏱</span>}
-                              </span>
-                              <span className="font-semibold text-sm">{fmt(s.valor_calculado)}</span>
-                              <button onClick={() => toggleEstadoSessao(s)} title={naoRealizada ? 'Marcar realizada' : 'Marcar não realizada'}
-                                className="text-gray-400 hover:text-amber-600 transition-colors text-lg leading-none">
-                                {naoRealizada ? '↩' : '✕'}
-                              </button>
-                              <button onClick={() => eliminarSessao(s.id)} title="Eliminar"
-                                className="text-gray-400 hover:text-red-500 transition-colors">
-                                🗑
-                              </button>
+                  {mesSelecionado === b.id && (() => {
+                    const todasSessoes = sessoesByMes[b.id] || []
+                    const GRUPOS: { label: string; ids: string[] }[] = [
+                      { label: 'Treinos PT', ids: ['treino_60', 'treino_45', 'treino_30', 'sw'] },
+                      { label: 'Rep / Avaliação', ids: ['rep'] },
+                      { label: 'OI', ids: ['oi'] },
+                      { label: 'Treino Oferta', ids: ['treino_oferta'] },
+                      { label: 'Natação', ids: ['n1','n2','n3','n4','n5','n6','n1f','n2f','n3f','n4f','n5f','n6f'] },
+                      { label: 'Sala (MI)', ids: ['mi'] },
+                    ]
+                    const renderSessao = (s: Sessao) => {
+                      const naoRealizada = s.estado !== 'realizada'
+                      const nomeAluno = s.num_socio ? (alunos.find(a => a.num_socio === s.num_socio && a.contacto === s.contacto)?.nome ?? s.num_socio) : null
+                      const tipoNome = tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id
+                      return (
+                        <div key={s.id} className={`flex items-center gap-2 rounded-xl px-3 py-2 ${naoRealizada ? 'bg-red-50 text-gray-400' : 'bg-white border border-gray-100 text-gray-700'}`}>
+                          <span className={`flex-1 text-sm ${naoRealizada ? 'line-through' : ''}`}>
+                            {s.data_sessao}{nomeAluno ? ` · ${nomeAluno}` : ''}{nomeAluno ? ` · ${tipoNome}` : ` · ${tipoNome}`}
+                            {s.conta_horas && <span className="ml-1 text-xs text-blue-600 font-medium">⏱</span>}
+                          </span>
+                          <span className="font-semibold text-sm">{fmt(s.valor_calculado)}</span>
+                          <button onClick={() => toggleEstadoSessao(s)} title={naoRealizada ? 'Marcar realizada' : 'Marcar não realizada'}
+                            className="text-gray-400 hover:text-amber-600 transition-colors text-lg leading-none">
+                            {naoRealizada ? '↩' : '✕'}
+                          </button>
+                          <button onClick={() => eliminarSessao(s.id)} title="Eliminar"
+                            className="text-gray-400 hover:text-red-500 transition-colors">
+                            🗑
+                          </button>
+                        </div>
+                      )
+                    }
+                    const restantes = new Set(todasSessoes.map(s => s.id))
+                    const gruposComSessoes = GRUPOS.map(g => {
+                      const ss = todasSessoes.filter(s => g.ids.includes(s.tipo_sessao_id))
+                      ss.forEach(s => restantes.delete(s.id))
+                      return { ...g, sessoes: ss }
+                    }).filter(g => g.sessoes.length > 0)
+                    const outras = todasSessoes.filter(s => restantes.has(s.id))
+                    if (outras.length > 0) gruposComSessoes.push({ label: 'Outros', ids: [], sessoes: outras })
+                    return (
+                      <div className="border-t border-gray-100 bg-gray-50/50 p-3 space-y-3">
+                        {todasSessoes.length === 0
+                          ? <p className="text-sm text-gray-400 py-1">Sem sessões registadas.</p>
+                          : gruposComSessoes.map(g => (
+                            <div key={g.label}>
+                              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{g.label} ({g.sessoes.length})</p>
+                              <div className="space-y-1">{g.sessoes.map(renderSessao)}</div>
                             </div>
-                          )
-                        })
-                      }
-                    </div>
-                  )}
+                          ))
+                        }
+                      </div>
+                    )
+                  })()}
                 </div>
               ))}
             </div>
