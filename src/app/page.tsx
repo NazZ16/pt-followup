@@ -46,7 +46,7 @@ export default function BriefingPage() {
       supabase.from('sessoes').select('*').eq('data_sessao', amanha),
       supabase.from('sessoes').select('*').gte('data_sessao', hoje).lte('data_sessao', fimSemana).order('data_sessao').order('hora_inicio'),
       supabase.from('tipos_sessao').select('*'),
-      supabase.from('alunos').select('convertido, plano_confirmado_em, estado'),
+      supabase.from('alunos').select('*'),
       supabase.from('alunos').select('*').eq('convertido', true).eq('estado', 'ativo'),
       supabase.from('servicos_pt').select('*'),
       supabase.from('niveis_remuneracao').select('*').order('horas_min'),
