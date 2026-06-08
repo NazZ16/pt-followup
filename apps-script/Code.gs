@@ -19,8 +19,8 @@ const TIPOS_SESSAO_PT = ['treino_60', 'treino_45', 'sw'];
 
 // Tipos standalone — sem aluno associado (título é apenas o código)
 // Duração calculada pela hora início/fim do evento
-// n1-n6: aulas de natação por nível
-const TIPOS_STANDALONE = ['mi', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6'];
+// n1-n6: aulas de natação por nível; n1f-n6f: feminino
+const TIPOS_STANDALONE = ['mi', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n1f', 'n2f', 'n3f', 'n4f', 'n5f', 'n6f'];
 
 // Tipos de avaliação/prospeção — identificam também o tipo de aluno
 // Formato: "rep Nome - NumSocio"  ou  "oi Nome - NumSocio"
@@ -340,7 +340,8 @@ function registarSessaoStandalone(tipoSessaoId, dataEvento, horaInicio, duracaoM
   if (resp && resp.error) {
     Logger.log('Erro sessão standalone: ' + JSON.stringify(resp));
   } else {
-    Logger.log('Sessão MI: ' + dataEvento + ' | ' + duracaoMin + 'min | ' + valorCalculado + '€');
+    const logLabel = tipoSessaoId === 'mi' ? 'MI' : 'Natação ' + tipoSessaoId.toUpperCase();
+    Logger.log('Sessão ' + logLabel + ': ' + dataEvento + ' | ' + duracaoMin + 'min | ' + valorCalculado + '€');
   }
 }
 
