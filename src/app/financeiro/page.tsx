@@ -594,12 +594,18 @@ export default function FinanceiroPage() {
                       <div className="border-t border-gray-100 bg-gray-50/50 p-3 space-y-3">
                         {todasSessoes.length === 0
                           ? <p className="text-sm text-gray-400 py-1">Sem sessões registadas.</p>
-                          : gruposComSessoes.map(g => (
-                            <div key={g.label}>
-                              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{g.label} ({g.sessoes.length})</p>
-                              <div className="space-y-1">{g.sessoes.map(renderSessao)}</div>
-                            </div>
-                          ))
+                          : gruposComSessoes.map(g => {
+                            const totalGrupo = g.sessoes.filter(s => s.estado === 'realizada').reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0)
+                            return (
+                              <div key={g.label}>
+                                <div className="flex items-center justify-between mb-1">
+                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{g.label} ({g.sessoes.length})</p>
+                                  {totalGrupo > 0 && <p className="text-xs font-bold text-emerald-700">{fmt(totalGrupo)}</p>}
+                                </div>
+                                <div className="space-y-1">{g.sessoes.map(renderSessao)}</div>
+                              </div>
+                            )
+                          })
                         }
                       </div>
                     )

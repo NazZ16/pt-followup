@@ -63,10 +63,11 @@ export default function BriefingPage() {
     setSessoesSemana(((sw as Sessao[]) || []).map(s => ({ ...s, nome: nomePorSocio(s.num_socio, s.contacto) })))
     const tsData = (ts as TipoSessaoRow[]) || []
     setTiposSessao(tsData)
+    const NATACAO = new Set(['n1','n2','n3','n4','n5','n6','n1f','n2f','n3f','n4f','n5f','n6f'])
     const avalIds = new Set(tsData.filter(x => x.categoria === 'avaliacao').map(x => x.id))
     setAvaliacoesAmanha(
       ((sa as Sessao[]) || [])
-        .filter(s => avalIds.has(s.tipo_sessao_id))
+        .filter(s => avalIds.has(s.tipo_sessao_id) && !NATACAO.has(s.tipo_sessao_id))
         .map(s => ({ ...s, nome: nomePorSocio(s.num_socio, s.contacto) }))
     )
     setStats({
