@@ -28,6 +28,12 @@ const MENSAGENS: Record<TipoAluno, Record<TipoFollowup, (nome: string) => string
     '60d':  (n) => `Olá ${n}! Como está a correr o treino? Se quiser elevar os resultados com um programa personalizado, estou disponível para conversar. Temos opções para todos os objectivos! 💪`,
     '120d': (n) => `Olá ${n}! Há 4 meses que fez o seu treino experimental connosco. Gostava de voltar a fazer uma avaliação e ver onde pode chegar com um plano personalizado?`,
   },
+  pt_direto: {
+    '7d':   (n) => `Olá ${n}! 👋 Como estão a correr os treinos? Estou aqui para qualquer dúvida ou ajuste.`,
+    '30d':  (n) => `Olá ${n}! Já passou um mês. Como se está a sentir com os treinos? Alguma coisa que queira ajustar?`,
+    '60d':  (n) => `Olá ${n}! Dois meses de trabalho conjunto — como está a sentir a evolução?`,
+    '120d': (n) => `Olá ${n}! Já passaram 4 meses. Está na altura de fazer uma nova avaliação e ver toda a evolução! Quando é que lhe dá jeito?`,
+  },
 }
 
 export function gerarMensagem(nome: string, tipo: TipoAluno, marco: TipoFollowup): string {
