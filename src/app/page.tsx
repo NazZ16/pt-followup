@@ -43,8 +43,8 @@ export default function BriefingPage() {
       supabase.from('v_tarefas_hoje').select('*').order('data_prevista'),
       supabase.from('alunos').select('*').is('plano_confirmado_em', null).lt('ultima_avaliacao', cutoff).eq('estado', 'ativo'),
       supabase.from('briefings').select('*').eq('estado', 'aberto'),
-      supabase.from('sessoes').select('*, alunos(nome)').eq('data_sessao', amanha),
-      supabase.from('sessoes').select('*, alunos(nome)').gte('data_sessao', hoje).lte('data_sessao', fimSemana).order('data_sessao').order('hora_inicio'),
+      supabase.from('sessoes').select('*').eq('data_sessao', amanha),
+      supabase.from('sessoes').select('*').gte('data_sessao', hoje).lte('data_sessao', fimSemana).order('data_sessao').order('hora_inicio'),
       supabase.from('tipos_sessao').select('*'),
       supabase.from('alunos').select('convertido, plano_confirmado_em, estado'),
       supabase.from('alunos').select('*').eq('convertido', true).eq('estado', 'ativo'),
@@ -57,16 +57,18 @@ export default function BriefingPage() {
     setTarefas((t as TarefaHoje[]) || [])
     setSemPlano((a as Aluno[]) || [])
     setBriefingAberto(!!b?.length && new Date().getDate() > 5)
-    setSessoesSemana(((sw as (Sessao & { alunos?: { nome: string } })[]) || []).map(s => ({ ...s, nome: s.alunos?.nome })))
+    const aa = (allAlunos as (Aluno & { convertido: boolean; plano_confirmado_em: string | null; estado: string })[]) || []
+    const nomePorSocio = (ns: string | null, c: string | null) =>
+      ns ? (aa.find(x => x.num_socio === ns && x.contacto === c) as Aluno | undefined)?.nome : undefined
+    setSessoesSemana(((sw as Sessao[]) || []).map(s => ({ ...s, nome: nomePorSocio(s.num_socio, s.contacto) })))
     const tsData = (ts as TipoSessaoRow[]) || []
     setTiposSessao(tsData)
     const avalIds = new Set(tsData.filter(x => x.categoria === 'avaliacao').map(x => x.id))
     setAvaliacoesAmanha(
-      ((sa as (Sessao & { alunos?: { nome: string } })[]) || [])
+      ((sa as Sessao[]) || [])
         .filter(s => avalIds.has(s.tipo_sessao_id))
-        .map(s => ({ ...s, nome: s.alunos?.nome }))
+        .map(s => ({ ...s, nome: nomePorSocio(s.num_socio, s.contacto) }))
     )
-    const aa = (allAlunos as { convertido: boolean; plano_confirmado_em: string | null; estado: string }[]) || []
     setStats({
       totalAlunos: aa.filter(x => x.estado === 'ativo').length,
       convertidos: aa.filter(x => x.convertido && x.estado === 'ativo').length,
