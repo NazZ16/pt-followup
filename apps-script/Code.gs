@@ -11,7 +11,7 @@ const PREFIXO_FOLLOWUP = 'followup__';
 
 // Dias de janela para o sync normal (passado e futuro)
 const JANELA_DIAS_ANTES  = 1;
-const JANELA_DIAS_DEPOIS = 30;
+const JANELA_DIAS_DEPOIS = 7;
 
 // Tipos de sessão de treino PT — mapeados directamente para tipo_sessao_id
 // Formato no calendário: "treino_60 Nome - NumSocio"  ou  "treino_60 Nome"
