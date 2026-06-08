@@ -206,46 +206,65 @@ export default function BriefingPage() {
         </section>
       )}
 
-      {/* SESSÕES DA SEMANA (hoje + próximos 7 dias) */}
-      {sessoesSemana.length > 0 && (() => {
+      {/* SESSÕES DA SEMANA (hoje + próximos 7 dias, excl. natação) */}
+      {(() => {
+        const NATACAO = new Set(['n1','n2','n3','n4','n5','n6','n1f','n2f','n3f','n4f','n5f','n6f'])
         const hojeStr = new Date().toISOString().slice(0, 10)
-        const dias = Array.from(new Set(sessoesSemana.map(s => s.data_sessao)))
+        const semanaFiltrada = sessoesSemana.filter(s => !NATACAO.has(s.tipo_sessao_id))
+        if (semanaFiltrada.length === 0) return null
+        const dias = Array.from(new Set(semanaFiltrada.map(s => s.data_sessao)))
         return (
           <section>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">🏋️ Sessões da semana</p>
-            <div className="space-y-2">
-              {dias.map(dia => {
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">🏋️ Semana</p>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              {dias.map((dia, diaIdx) => {
                 const isHoje = dia === hojeStr
-                const label = isHoje ? 'Hoje' : new Date(dia + 'T12:00:00').toLocaleDateString('pt-PT', { weekday: 'short', day: 'numeric', month: 'short' })
+                const d = new Date(dia + 'T12:00:00')
+                const diaSemana = d.toLocaleDateString('pt-PT', { weekday: 'short' }).replace('.','')
+                const diaMes = d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })
+                const sessoesDia = semanaFiltrada.filter(s => s.data_sessao === dia)
+                const totalDia = sessoesDia.reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0)
                 return (
-                  <div key={dia} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wide ${isHoje ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-500'}`}>{label}</div>
-                    {sessoesSemana.filter(s => s.data_sessao === dia).map(s => {
-                      const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
-                      const realizada = s.estado === 'realizada'
-                      const semValor = !s.valor_calculado || s.valor_calculado === 0
-                      return (
-                        <div key={s.id} className={`px-3 py-2.5 flex items-center gap-2.5 border-t border-gray-100 ${!realizada && isHoje ? 'opacity-60' : ''}`}>
-                          {isHoje && (
-                            <button onClick={() => toggleSessao(s)}
-                              className={`w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-xs font-bold border-2 transition-colors ${
-                                realizada ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 text-gray-300 hover:border-emerald-400'
-                              }`}>
-                              {realizada ? '✓' : ''}
-                            </button>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-sm text-gray-900 leading-tight">{s.nome ?? (s.num_socio ? `Nº ${s.num_socio}` : tipo?.nome ?? s.tipo_sessao_id)}</p>
-                            <p className="text-xs text-gray-400">{s.hora_inicio ? s.hora_inicio.slice(0, 5) + ' · ' : ''}{tipo?.nome ?? s.tipo_sessao_id}</p>
+                  <div key={dia} className={`flex gap-0 ${diaIdx > 0 ? 'border-t border-gray-100' : ''}`}>
+                    {/* Coluna da data */}
+                    <div className={`w-14 shrink-0 flex flex-col items-center justify-center py-2.5 ${isHoje ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-500'}`}>
+                      <span className="text-xs font-semibold uppercase">{diaSemana}</span>
+                      <span className={`text-lg font-bold leading-tight ${isHoje ? 'text-white' : 'text-gray-800'}`}>{d.getDate()}</span>
+                    </div>
+                    {/* Sessões do dia */}
+                    <div className="flex-1 min-w-0 py-1.5 px-2.5 space-y-1">
+                      {sessoesDia.map(s => {
+                        const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
+                        const realizada = s.estado === 'realizada'
+                        const label = s.nome ?? (s.num_socio ? `Nº ${s.num_socio}` : tipo?.nome ?? s.tipo_sessao_id)
+                        const tipoLabel = tipo?.nome ?? s.tipo_sessao_id
+                        const isTreino = s.tipo_sessao_id.startsWith('treino') || s.tipo_sessao_id === 'sw'
+                        return (
+                          <div key={s.id} className={`flex items-center gap-2 rounded-lg px-2 py-1 ${realizada ? 'bg-emerald-50' : isHoje ? 'bg-amber-50' : 'bg-gray-50'}`}>
+                            {isHoje && (
+                              <button onClick={() => toggleSessao(s)}
+                                className={`w-5 h-5 rounded-full shrink-0 flex items-center justify-center text-xs font-bold border-2 transition-colors ${
+                                  realizada ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 hover:border-emerald-400'
+                                }`}>
+                                {realizada ? '✓' : ''}
+                              </button>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-semibold text-gray-900">{label}</span>
+                              {s.hora_inicio && <span className="text-xs text-gray-400 ml-1.5">{s.hora_inicio.slice(0,5)}</span>}
+                              {!isTreino && <span className="text-xs text-gray-400 ml-1.5">· {tipoLabel}</span>}
+                            </div>
+                            {s.valor_calculado ? <span className="text-xs font-semibold text-gray-600 shrink-0">{fmt(s.valor_calculado)}</span> : null}
                           </div>
-                          {s.conta_horas && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">⏱</span>}
-                          {semValor
-                            ? <span className="text-xs text-gray-400 font-medium">Sem valor</span>
-                            : <span className="font-semibold text-sm text-gray-900">{fmt(s.valor_calculado)}</span>
-                          }
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+                    </div>
+                    {/* Total do dia */}
+                    {totalDia > 0 && (
+                      <div className="shrink-0 flex items-center justify-center px-2.5 border-l border-gray-100">
+                        <span className="text-xs font-bold text-emerald-700">{fmt(totalDia)}</span>
+                      </div>
+                    )}
                   </div>
                 )
               })}
