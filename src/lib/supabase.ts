@@ -88,8 +88,8 @@ export interface TipoSessaoRow {
 
 export interface Sessao {
   id: string
-  num_socio: string
-  contacto: string
+  num_socio: string | null
+  contacto: string | null
   tipo_sessao_id: string
   data_sessao: string
   estado: string
@@ -99,6 +99,7 @@ export interface Sessao {
   conta_horas: boolean
   hora_inicio: string | null
   notas: string | null
+  calendar_event_id: string | null
   criado_em: string
 }
 

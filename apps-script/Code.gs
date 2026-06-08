@@ -76,43 +76,45 @@ function sincronizarDesde1Junho() {
 function sincronizarPeriodo(inicio, fim) {
   const niveis     = carregarNiveis();
   const tipos      = carregarTiposSessao();
-  const nivelAtual = calcularNivelAtual(niveis); // nivel fixo baseado em planos vendidos
+  const nivelAtual = calcularNivelAtual(niveis);
   Logger.log('Nivel actual: ' + (nivelAtual ? nivelAtual.nivel : 'nenhum'));
   const calendario = CalendarApp.getDefaultCalendar();
-  const eventos   = calendario.getEvents(inicio, fim);
+  const eventos    = calendario.getEvents(inicio, fim);
 
+  const eventIdsVistos = []; // IDs dos eventos do calendário processados neste sync
   let processados = 0;
   let ignorados   = 0;
 
-  eventos.forEach(evento => {
+  eventos.forEach(function(evento) {
     const titulo = evento.getTitle().trim();
     if (titulo.toLowerCase().startsWith(PREFIXO_FOLLOWUP)) { ignorados++; return; }
 
+    const eventId    = evento.getId();
     const startTime  = evento.getStartTime();
     const endTime    = evento.getEndTime();
     const dataEvento = Utilities.formatDate(startTime, Session.getScriptTimeZone(), 'yyyy-MM-dd');
     const horaInicio = Utilities.formatDate(startTime, Session.getScriptTimeZone(), 'HH:mm');
-    const duracaoMin = Math.round((endTime - startTime) / 60000); // duração em minutos
+    const duracaoMin = Math.round((endTime - startTime) / 60000);
 
-    // Verificar se é evento standalone (ex: "mi")
     const tituloLower = titulo.toLowerCase().trim();
-    const tipoStandalone = TIPOS_STANDALONE.find(t => tituloLower === t);
+    const tipoStandalone = TIPOS_STANDALONE.find(function(t) { return tituloLower === t; });
     if (tipoStandalone) {
-      registarSessaoStandalone(tipoStandalone, dataEvento, horaInicio, duracaoMin, nivelAtual, tipos);
+      registarSessaoStandalone(eventId, tipoStandalone, dataEvento, horaInicio, duracaoMin, nivelAtual, tipos);
+      eventIdsVistos.push(eventId);
       processados++;
       return;
     }
 
     const parsed = parsearEvento(titulo, evento.getDescription());
     if (!parsed) {
-      // Tentar match por nome com aluno PT activo
       const alunoMatch = procurarAlunoPorNome(titulo);
       if (alunoMatch) {
         const tipoSessaoId = alunoMatch.duracao_min <= 45 ? 'treino_45' : 'treino_60';
         registarSessaoComValor(
           { tipoSessaoId, categoria: 'treino', tipoAluno: null, nome: alunoMatch.nome, numSocio: alunoMatch.num_socio, contacto: alunoMatch.contacto },
-          dataEvento, horaInicio, nivelAtual, tipos
+          eventId, dataEvento, horaInicio, nivelAtual, tipos
         );
+        eventIdsVistos.push(eventId);
         processados++;
       } else {
         ignorados++;
@@ -125,9 +127,13 @@ function sincronizarPeriodo(inicio, fim) {
       if (!aluno) return;
     }
 
-    registarSessaoComValor(parsed, dataEvento, horaInicio, nivelAtual, tipos);
+    registarSessaoComValor(parsed, eventId, dataEvento, horaInicio, nivelAtual, tipos);
+    eventIdsVistos.push(eventId);
     processados++;
   });
+
+  // Cancelar sessões cujo evento já não existe no calendário (dentro da janela)
+  cancelarSessoesRemovidas(inicio, fim, eventIdsVistos);
 
   Logger.log('Sync ' + Utilities.formatDate(inicio, Session.getScriptTimeZone(), 'yyyy-MM-dd') +
     ' → ' + Utilities.formatDate(fim, Session.getScriptTimeZone(), 'yyyy-MM-dd') +
@@ -294,38 +300,56 @@ function procurarAlunoPorNome(titulo) {
 // REGISTAR SESSÃO STANDALONE (sem aluno — ex: MI)
 // Duração vem do evento do calendário
 // ============================================================
-function registarSessaoStandalone(tipoSessaoId, dataEvento, horaInicio, duracaoMin, nivelAtual, tipos) {
-  // Verificar se já existe
+function registarSessaoStandalone(eventId, tipoSessaoId, dataEvento, horaInicio, duracaoMin, nivelAtual, tipos) {
+  const tipoInfo = tipos.find(function(t) { return t.id === tipoSessaoId; });
+
+  let valorCalculado = null;
+  if (tipoSessaoId === 'mi') {
+    const repTipo  = tipos.find(function(t) { return t.id === 'rep'; });
+    const valorRep = repTipo ? (repTipo.valor_fixo || 0) : 0;
+    const horas    = Math.ceil(duracaoMin / 60);
+    valorCalculado = valorRep * horas;
+  } else if (tipoInfo && tipoInfo.valor_fixo != null) {
+    valorCalculado = tipoInfo.valor_fixo;
+  } else if (tipoInfo && tipoInfo.categoria === 'treino' && nivelAtual) {
+    const dur = tipoInfo.duracao_min || duracaoMin;
+    valorCalculado = dur <= 45 ? nivelAtual.valor_45min : nivelAtual.valor_60min;
+  }
+
+  // Procurar por calendar_event_id
   const existente = supabaseFetch(
-    '/rest/v1/sessoes?num_socio=is.null&data_sessao=eq.' + dataEvento +
-    '&tipo_sessao_id=eq.' + tipoSessaoId + '&select=id',
+    '/rest/v1/sessoes?calendar_event_id=eq.' + encodeURIComponent(eventId) + '&select=id,data_sessao,mes_briefing',
     'GET'
   );
-  if (existente && existente.length > 0) return;
 
   const dataObj     = new Date(dataEvento + 'T12:00:00');
   const mesBriefing = dataObj.getFullYear() + '-' + String(dataObj.getMonth() + 1).padStart(2, '0');
   garantirBriefing(mesBriefing, dataObj.getFullYear(), dataObj.getMonth() + 1);
 
-  const tipoInfo = tipos.find(t => t.id === tipoSessaoId);
+  const logLabel = tipoSessaoId === 'mi' ? 'MI' : 'Natação ' + tipoSessaoId.toUpperCase();
 
-  let valorCalculado = null;
-  if (tipoSessaoId === 'mi') {
-    // MI: rep.valor_fixo × ceil(duração real / 60)
-    const repTipo  = tipos.find(t => t.id === 'rep');
-    const valorRep = repTipo ? (repTipo.valor_fixo || 0) : 0;
-    const horas    = Math.ceil(duracaoMin / 60);
-    valorCalculado = valorRep * horas;
-  } else if (tipoInfo && tipoInfo.valor_fixo != null) {
-    // Natação (n1-n6) e outros: valor fixo configurado no tipo de sessão
-    valorCalculado = tipoInfo.valor_fixo;
-  } else if (tipoInfo && tipoInfo.categoria === 'treino' && nivelAtual) {
-    // Fallback: usar nivel actual se não tiver valor_fixo
-    const dur = tipoInfo.duracao_min || duracaoMin;
-    valorCalculado = dur <= 45 ? nivelAtual.valor_45min : nivelAtual.valor_60min;
+  if (existente && existente.length > 0) {
+    // Atualizar sessão existente
+    const sessaoId = existente[0].id;
+    const patch = {
+      tipo_sessao_id:  tipoSessaoId,
+      data_sessao:     dataEvento,
+      hora_inicio:     horaInicio || null,
+      mes_briefing:    mesBriefing,
+      valor_calculado: valorCalculado,
+    };
+    const resp = supabaseFetch('/rest/v1/sessoes?id=eq.' + sessaoId, 'PATCH', patch, { 'Prefer': 'return=minimal' });
+    if (resp && resp.error) {
+      Logger.log('Erro update sessão standalone: ' + JSON.stringify(resp));
+    } else {
+      Logger.log('Sessão ' + logLabel + ' actualizada: ' + dataEvento + ' | ' + valorCalculado + '€');
+    }
+    return;
   }
 
+  // Inserir nova sessão
   const payload = {
+    calendar_event_id: eventId,
     tipo_sessao_id:    tipoSessaoId,
     data_sessao:       dataEvento,
     hora_inicio:       horaInicio || null,
@@ -335,12 +359,10 @@ function registarSessaoStandalone(tipoSessaoId, dataEvento, horaInicio, duracaoM
     conta_horas:       false,
     valor_calculado:   valorCalculado,
   };
-
   const resp = supabaseFetch('/rest/v1/sessoes', 'POST', payload, { 'Prefer': 'return=minimal' });
   if (resp && resp.error) {
     Logger.log('Erro sessão standalone: ' + JSON.stringify(resp));
   } else {
-    const logLabel = tipoSessaoId === 'mi' ? 'MI' : 'Natação ' + tipoSessaoId.toUpperCase();
     Logger.log('Sessão ' + logLabel + ': ' + dataEvento + ' | ' + duracaoMin + 'min | ' + valorCalculado + '€');
   }
 }
@@ -348,42 +370,56 @@ function registarSessaoStandalone(tipoSessaoId, dataEvento, horaInicio, duracaoM
 // ============================================================
 // REGISTAR SESSÃO COM VALOR CALCULADO
 // ============================================================
-function registarSessaoComValor(parsed, dataEvento, horaInicio, nivelAtual, tipos) {
-  // Procurar aluno na BD
-  const aluno = procurarAluno(parsed);
-  const numSocio  = aluno ? aluno.num_socio  : parsed.numSocio;
-  const contacto  = aluno ? aluno.contacto   : parsed.contacto;
+function registarSessaoComValor(parsed, eventId, dataEvento, horaInicio, nivelAtual, tipos) {
+  const aluno    = procurarAluno(parsed);
+  const numSocio = aluno ? aluno.num_socio : parsed.numSocio;
+  const contacto = aluno ? aluno.contacto  : parsed.contacto;
 
   if (!numSocio) {
     Logger.log('Sessão ignorada — aluno não encontrado: ' + parsed.nome);
     return;
   }
 
-  // Verificar se a sessão já existe
-  const existente = supabaseFetch(
-    '/rest/v1/sessoes?num_socio=eq.' + encodeURIComponent(numSocio) +
-    '&contacto=eq.'    + encodeURIComponent(contacto || '') +
-    '&data_sessao=eq.' + dataEvento +
-    '&tipo_sessao_id=eq.' + parsed.tipoSessaoId +
-    '&select=id',
-    'GET'
-  );
-  if (existente && existente.length > 0) return;
+  const tipoInfo      = tipos.find(function(t) { return t.id === parsed.tipoSessaoId; });
+  const convertido    = aluno ? aluno.convertido : false;
+  const contaHoras    = convertido && tipoInfo ? !!tipoInfo.conta_para_nivel : false;
+  const valorCalculado = calcularValor(parsed.tipoSessaoId, tipoInfo, convertido, nivelAtual, tipos);
 
   const dataObj     = new Date(dataEvento + 'T12:00:00');
   const mesBriefing = dataObj.getFullYear() + '-' + String(dataObj.getMonth() + 1).padStart(2, '0');
   garantirBriefing(mesBriefing, dataObj.getFullYear(), dataObj.getMonth() + 1);
 
-  // Tipo de sessão na BD
-  const tipoInfo     = tipos.find(t => t.id === parsed.tipoSessaoId);
-  const convertido   = aluno ? aluno.convertido : false;
-  const contaPorNivel = tipoInfo ? !!tipoInfo.conta_para_nivel : false;
-  const contaHoras   = convertido && contaPorNivel;
+  // Procurar por calendar_event_id
+  const existente = supabaseFetch(
+    '/rest/v1/sessoes?calendar_event_id=eq.' + encodeURIComponent(eventId) + '&select=id',
+    'GET'
+  );
 
-  // Calcular valor
-  const valorCalculado = calcularValor(parsed.tipoSessaoId, tipoInfo, convertido, nivelAtual, tipos);
+  if (existente && existente.length > 0) {
+    // Actualizar — data, tipo, aluno ou valor podem ter mudado
+    const sessaoId = existente[0].id;
+    const patch = {
+      num_socio:       numSocio,
+      contacto:        contacto || '',
+      tipo_sessao_id:  parsed.tipoSessaoId,
+      data_sessao:     dataEvento,
+      hora_inicio:     horaInicio || null,
+      mes_briefing:    mesBriefing,
+      conta_horas:     contaHoras,
+      valor_calculado: valorCalculado,
+    };
+    const resp = supabaseFetch('/rest/v1/sessoes?id=eq.' + sessaoId, 'PATCH', patch, { 'Prefer': 'return=minimal' });
+    if (resp && resp.error) {
+      Logger.log('Erro update sessão: ' + JSON.stringify(resp));
+    } else {
+      Logger.log('Sessão actualizada: ' + parsed.tipoSessaoId + ' | ' + parsed.nome + ' | ' + dataEvento);
+    }
+    return;
+  }
 
+  // Inserir nova sessão
   const payload = {
+    calendar_event_id: eventId,
     num_socio:         numSocio,
     contacto:          contacto || '',
     tipo_sessao_id:    parsed.tipoSessaoId,
@@ -395,7 +431,6 @@ function registarSessaoComValor(parsed, dataEvento, horaInicio, nivelAtual, tipo
     conta_horas:       contaHoras,
     valor_calculado:   valorCalculado,
   };
-
   const resp = supabaseFetch('/rest/v1/sessoes', 'POST', payload, { 'Prefer': 'return=minimal' });
   if (resp && resp.error) {
     Logger.log('Erro ao registar sessão: ' + JSON.stringify(resp));
@@ -441,6 +476,33 @@ function calcularValor(tipoSessaoId, tipoInfo, convertido, nivelAtual, tipos) {
   if (tipoInfo.valor_fixo != null) return tipoInfo.valor_fixo;
 
   return null;
+}
+
+// ============================================================
+// ============================================================
+// CANCELAR SESSÕES CUJO EVENTO JÁ NÃO EXISTE NO CALENDÁRIO
+// Só actua sobre sessões com calendar_event_id e estado != cancelada
+// ============================================================
+function cancelarSessoesRemovidas(inicio, fim, eventIdsVistos) {
+  const dataInicio = Utilities.formatDate(inicio, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const dataFim    = Utilities.formatDate(fim,    Session.getScriptTimeZone(), 'yyyy-MM-dd');
+
+  const sessoes = supabaseFetch(
+    '/rest/v1/sessoes?calendar_event_id=not.is.null' +
+    '&data_sessao=gte.' + dataInicio +
+    '&data_sessao=lte.' + dataFim +
+    '&estado=neq.cancelada' +
+    '&select=id,calendar_event_id,estado',
+    'GET'
+  ) || [];
+
+  sessoes.forEach(function(s) {
+    if (eventIdsVistos.indexOf(s.calendar_event_id) === -1) {
+      // Evento já não existe no calendário → cancelar
+      supabaseFetch('/rest/v1/sessoes?id=eq.' + s.id, 'PATCH', { estado: 'cancelada' }, { 'Prefer': 'return=minimal' });
+      Logger.log('Sessão cancelada (evento removido do calendário): ' + s.id);
+    }
+  });
 }
 
 // ============================================================
