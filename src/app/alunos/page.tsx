@@ -6,9 +6,9 @@ import { gerarMensagem, gerarLinkWhatsApp } from '@/lib/whatsapp'
 import { confirmarPlanoViaScript, appsScriptConfigurado } from '@/lib/appsscript'
 
 const TIPO_COLOR: Record<TipoAluno, string> = {
-  rep: 'bg-purple-100 text-purple-700', oi: 'bg-blue-100 text-blue-700', treino_oferta: 'bg-green-100 text-green-700',
+  rep: 'bg-purple-100 text-purple-700', oi: 'bg-blue-100 text-blue-700', treino_oferta: 'bg-green-100 text-green-700', pt_direto: 'bg-orange-100 text-orange-700',
 }
-const TIPO_LABEL: Record<TipoAluno, string> = { rep: 'Rep', oi: 'OI', treino_oferta: 'Treino Oferta' }
+const TIPO_LABEL: Record<TipoAluno, string> = { rep: 'Rep', oi: 'OI', treino_oferta: 'Treino Oferta', pt_direto: 'Cliente Direto' }
 const MARCO_LABEL: Record<TipoFollowup, string> = { '7d': 'D+7', '30d': 'D+30', '60d': 'D+60', '120d': 'D+120' }
 const ESTADO_COLOR: Record<string, string> = {
   pendente: 'text-amber-600', realizado: 'text-green-600', nao_realizado: 'text-red-500', adiado: 'text-gray-400',
@@ -36,9 +36,9 @@ export default function AlunosPage() {
   const [editandoNotas, setEditandoNotas] = useState<string | null>(null)
   const [notas, setNotas] = useState('')
   const [editandoAluno, setEditandoAluno] = useState<string | null>(null)
-  const [formEdit, setFormEdit] = useState({ nome: '', contacto: '', num_socio: '', tipo: 'rep' as TipoAluno, ultima_avaliacao: '' })
+  const [formEdit, setFormEdit] = useState({ nome: '', contacto: '', num_socio: '', tipo: 'pt_direto' as TipoAluno, ultima_avaliacao: '' })
   const [novoAluno, setNovoAluno] = useState(false)
-  const [form, setForm] = useState({ num_socio: '', contacto: '', nome: '', tipo: 'rep' as TipoAluno, ultima_avaliacao: '' })
+  const [form, setForm] = useState({ num_socio: '', contacto: '', nome: '', tipo: 'pt_direto' as TipoAluno, ultima_avaliacao: '' })
   const [formJaPT, setFormJaPT] = useState(false)
   const [formPTNovo, setFormPTNovo] = useState({ plano_pt: '', horas_pt_mensais: '', meses_pagos_pt: '1' })
   const [saving, setSaving] = useState(false)
@@ -134,7 +134,7 @@ export default function AlunosPage() {
       horas_pt_mensais: formJaPT && formPTNovo.horas_pt_mensais ? Number(formPTNovo.horas_pt_mensais) : null,
       meses_pagos_pt: formJaPT ? Number(formPTNovo.meses_pagos_pt) || 1 : null,
     }, { onConflict: 'num_socio,contacto' })
-    setForm({ num_socio: '', contacto: '', nome: '', tipo: 'rep', ultima_avaliacao: '' })
+    setForm({ num_socio: '', contacto: '', nome: '', tipo: 'pt_direto', ultima_avaliacao: '' })
     setFormJaPT(false); setFormPTNovo({ plano_pt: '', horas_pt_mensais: '', meses_pagos_pt: '1' })
     setNovoAluno(false); setSaving(false); load()
   }
@@ -172,7 +172,7 @@ export default function AlunosPage() {
           <select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value as TipoAluno | 'todos')}
             className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="todos">Todos os tipos</option>
-            <option value="rep">Rep</option><option value="oi">OI</option><option value="treino_oferta">Treino Oferta</option>
+            <option value="rep">Rep</option><option value="oi">OI</option><option value="treino_oferta">Treino Oferta</option><option value="pt_direto">Cliente Direto</option>
           </select>
           <select value={filtroConvertido} onChange={e => setFiltroConvertido(e.target.value as 'todos' | 'pt' | 'nao_pt')}
             className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -201,6 +201,7 @@ export default function AlunosPage() {
               className="col-span-2 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             <select value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value as TipoAluno })}
               className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="pt_direto">Cliente Direto</option>
               <option value="rep">Rep</option><option value="oi">OI</option><option value="treino_oferta">Treino Oferta</option>
             </select>
             <input type="date" value={form.ultima_avaliacao} onChange={e => setForm({ ...form, ultima_avaliacao: e.target.value })}
@@ -404,6 +405,7 @@ export default function AlunosPage() {
                           className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         <select value={formEdit.tipo} onChange={e => setFormEdit({ ...formEdit, tipo: e.target.value as TipoAluno })}
                           className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                          <option value="pt_direto">Cliente Direto</option>
                           <option value="rep">Rep</option><option value="oi">OI</option><option value="treino_oferta">Treino Oferta</option>
                         </select>
                         <input type="date" value={formEdit.ultima_avaliacao} onChange={e => setFormEdit({ ...formEdit, ultima_avaliacao: e.target.value })}

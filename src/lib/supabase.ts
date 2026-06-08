@@ -5,7 +5,7 @@ const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 export const supabase = createClient(url, key)
 
-export type TipoAluno = 'rep' | 'oi' | 'treino_oferta'
+export type TipoAluno = 'rep' | 'oi' | 'treino_oferta' | 'pt_direto'
 export type TipoSessao = 'rep' | 'oi' | 'treino_oferta' | 'treino_60' | 'treino_45'
 export type EstadoTarefa = 'pendente' | 'realizado' | 'nao_realizado' | 'adiado'
 export type UrgenciaTarefa = 'atrasada' | 'hoje' | 'esta_semana' | 'futura'
@@ -88,8 +88,8 @@ export interface TipoSessaoRow {
 
 export interface Sessao {
   id: string
-  num_socio: string
-  contacto: string
+  num_socio: string | null
+  contacto: string | null
   tipo_sessao_id: string
   data_sessao: string
   estado: string
@@ -99,6 +99,7 @@ export interface Sessao {
   conta_horas: boolean
   hora_inicio: string | null
   notas: string | null
+  calendar_event_id: string | null
   criado_em: string
 }
 

@@ -24,7 +24,7 @@ export default function BriefingPage() {
   const [mes, setMes] = useState<MesCorrente | null>(null)
   const [semPlano, setSemPlano] = useState<Aluno[]>([])
   const [briefingAberto, setBriefingAberto] = useState(false)
-  const [sessoesHoje, setSessoesHoje] = useState<(Sessao & { nome?: string })[]>([])
+  const [sessoesSemana, setSessoesSemana] = useState<(Sessao & { nome?: string })[]>([])
   const [avaliacoesAmanha, setAvaliacoesAmanha] = useState<(Sessao & { nome?: string })[]>([])
   const [tiposSessao, setTiposSessao] = useState<TipoSessaoRow[]>([])
   const [stats, setStats] = useState({ totalAlunos: 0, convertidos: 0, semPlanoTotal: 0 })
@@ -36,68 +36,71 @@ export default function BriefingPage() {
     setLoading(true)
     const hoje = new Date().toISOString().slice(0, 10)
     const amanha = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+    const fimSemana = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
     const cutoff = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10)
-    const [{ data: t }, { data: a }, { data: b }, { data: sh }, { data: sa }, { data: ts }, { data: allAlunos }, { data: alunosPT }, { data: svs }, { data: nvs }, { data: fc }, { data: ssData }] = await Promise.all([
+    const mesBriefing = hoje.slice(0, 7)
+    const [{ data: t }, { data: a }, { data: b }, { data: sa }, { data: sw }, { data: ts }, { data: allAlunos }, { data: alunosPT }, { data: svs }, { data: nvs }, { data: fc }, { data: ssData }, { data: sesMes }] = await Promise.all([
       supabase.from('v_tarefas_hoje').select('*').order('data_prevista'),
       supabase.from('alunos').select('*').is('plano_confirmado_em', null).lt('ultima_avaliacao', cutoff).eq('estado', 'ativo'),
       supabase.from('briefings').select('*').eq('estado', 'aberto'),
-      supabase.from('sessoes').select('*, alunos(nome)').eq('data_sessao', hoje),
-      supabase.from('sessoes').select('*, alunos(nome)').eq('data_sessao', amanha),
+      supabase.from('sessoes').select('*').eq('data_sessao', amanha),
+      supabase.from('sessoes').select('*').gte('data_sessao', hoje).lte('data_sessao', fimSemana).order('data_sessao').order('hora_inicio'),
       supabase.from('tipos_sessao').select('*'),
-      supabase.from('alunos').select('convertido, plano_confirmado_em, estado'),
+      supabase.from('alunos').select('*'),
       supabase.from('alunos').select('*').eq('convertido', true).eq('estado', 'ativo'),
       supabase.from('servicos_pt').select('*'),
       supabase.from('niveis_remuneracao').select('*').order('horas_min'),
       supabase.from('config_fiscal').select('*').order('vigente_desde', { ascending: false }).limit(1).maybeSingle(),
       supabase.from('ss_trimestral').select('*').order('ano_aplicacao', { ascending: false }).order('trimestre_aplicacao', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('sessoes').select('valor_calculado').eq('mes_briefing', mesBriefing).eq('estado', 'realizada'),
     ])
     setTarefas((t as TarefaHoje[]) || [])
     setSemPlano((a as Aluno[]) || [])
     setBriefingAberto(!!b?.length && new Date().getDate() > 5)
-    setSessoesHoje(((sh as (Sessao & { alunos?: { nome: string } })[]) || []).map(s => ({ ...s, nome: s.alunos?.nome })))
+    const aa = (allAlunos as (Aluno & { convertido: boolean; plano_confirmado_em: string | null; estado: string })[]) || []
+    const nomePorSocio = (ns: string | null, c: string | null) =>
+      ns ? (aa.find(x => x.num_socio === ns && x.contacto === c) as Aluno | undefined)?.nome : undefined
+    setSessoesSemana(((sw as Sessao[]) || []).map(s => ({ ...s, nome: nomePorSocio(s.num_socio, s.contacto) })))
     const tsData = (ts as TipoSessaoRow[]) || []
     setTiposSessao(tsData)
+    const NATACAO = new Set(['n1','n2','n3','n4','n5','n6','n1f','n2f','n3f','n4f','n5f','n6f'])
     const avalIds = new Set(tsData.filter(x => x.categoria === 'avaliacao').map(x => x.id))
     setAvaliacoesAmanha(
-      ((sa as (Sessao & { alunos?: { nome: string } })[]) || [])
-        .filter(s => avalIds.has(s.tipo_sessao_id))
-        .map(s => ({ ...s, nome: s.alunos?.nome }))
+      ((sa as Sessao[]) || [])
+        .filter(s => avalIds.has(s.tipo_sessao_id) && !NATACAO.has(s.tipo_sessao_id))
+        .map(s => ({ ...s, nome: nomePorSocio(s.num_socio, s.contacto) }))
     )
-    const aa = (allAlunos as { convertido: boolean; plano_confirmado_em: string | null; estado: string }[]) || []
     setStats({
       totalAlunos: aa.filter(x => x.estado === 'ativo').length,
       convertidos: aa.filter(x => x.convertido && x.estado === 'ativo').length,
       semPlanoTotal: aa.filter(x => !x.plano_confirmado_em && x.estado === 'ativo').length,
     })
 
-    // Calcular mês em curso a partir dos planos PT activos
+    // Calcular mês em curso
     const aptivos = (alunosPT as Aluno[]) || []
     const servicosList = (svs as ServicoPT[]) || []
     const niveisList = (nvs as NivelRemuneracao[]) || []
     const taxaIrs = (fc as ConfigFiscal | null)?.taxa_irs ?? 0.1
     const ssMensal = (ssData as SsTrimestral | null)?.contribuicao_mensal ?? 0
 
-    const totalHoras = Math.round(aptivos.reduce((sum, a) => sum + (a.horas_pt_mensais || 0), 0) * 100) / 100
+    // Horas e nível baseados nos planos vendidos (igual ao financeiro)
+    const totalHoras = Math.round(aptivos.reduce((sum, al) => {
+      const sv = servicosList.find(s => s.nome === al.plano_pt)
+      if (sv) {
+        const dur = (sv.duracao_min ?? 60) / 60
+        const sessoes = sv.sessoes_semana || 1
+        const mult = sv.tipo === 'semanal' ? 4.33 : 1
+        return sum + sessoes * mult * dur
+      }
+      return sum + (al.horas_pt_mensais || 0)
+    }, 0) * 100) / 100
     const nivelAtual = [...niveisList].reverse().find(n =>
       totalHoras >= n.horas_min && (n.horas_max == null || totalHoras <= n.horas_max)
     ) ?? null
 
-    let bruto = 0
-    for (const aluno of aptivos) {
-      const sv = servicosList.find(s => s.nome === aluno.plano_pt)
-      if (!nivelAtual) continue
-      if (sv) {
-        const dur = sv.duracao_min ?? 60
-        const rate = dur <= 30 ? nivelAtual.valor_30min : dur <= 45 ? nivelAtual.valor_45min : nivelAtual.valor_60min
-        const sessoes = sv.sessoes_semana || 1
-        const multiplicador = sv.tipo === 'semanal' ? 4.33 : 1
-        bruto += sessoes * multiplicador * rate
-      } else {
-        // sem serviço associado: fallback horas × valor_60min
-        bruto += (aluno.horas_pt_mensais || 0) * nivelAtual.valor_60min
-      }
-    }
-    bruto = Math.round(bruto * 100) / 100
+    // Bruto real = soma do valor_calculado das sessões realizadas este mês (igual ao financeiro)
+    const bruto = Math.round(((sesMes as { valor_calculado: number | null }[]) || [])
+      .reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0) * 100) / 100
     const irsRetido = Math.round(bruto * taxaIrs * 100) / 100
     const liquido = Math.round((bruto - irsRetido - ssMensal) * 100) / 100
 
@@ -182,8 +185,8 @@ export default function BriefingPage() {
           <div className="space-y-1.5">
             {avaliacoesAmanha.map(s => {
               const hora = s.hora_inicio ? s.hora_inicio.slice(0, 5) : null
-              const nome = s.nome ?? `Nº ${s.num_socio}`
-              const link = gerarLinkWhatsApp(s.contacto, gerarMensagemLembrete(nome, hora))
+              const nome = s.nome ?? (s.num_socio ? `Nº ${s.num_socio}` : tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id)
+              const link = s.contacto ? gerarLinkWhatsApp(s.contacto, gerarMensagemLembrete(nome, hora)) : null
               return (
                 <div key={s.id} className="bg-white rounded-xl shadow-sm border border-blue-100 p-3">
                   <div className="flex items-center gap-2 mb-2.5">
@@ -191,10 +194,12 @@ export default function BriefingPage() {
                     {hora && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">{hora}</span>}
                     <span className="text-xs text-gray-400 ml-auto">{tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id}</span>
                   </div>
-                  <a href={link} target="_blank" rel="noopener noreferrer"
-                    className="block w-full text-center text-sm px-3 py-1.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors">
-                    Enviar lembrete WhatsApp
-                  </a>
+                  {link && (
+                    <a href={link} target="_blank" rel="noopener noreferrer"
+                      className="block w-full text-center text-sm px-3 py-1.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors">
+                      Enviar lembrete WhatsApp
+                    </a>
+                  )}
                 </div>
               )
             })}
@@ -202,33 +207,72 @@ export default function BriefingPage() {
         </section>
       )}
 
-      {/* SESSÕES HOJE */}
-      {sessoesHoje.length > 0 && (
-        <section>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">🏋️ Sessões de hoje</p>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-100">
-            {sessoesHoje.map(s => {
-              const realizada = s.estado === 'realizada'
-              return (
-                <div key={s.id} className={`px-3 py-2.5 flex items-center gap-2.5 ${realizada ? '' : 'opacity-50'}`}>
-                  <button onClick={() => toggleSessao(s)}
-                    className={`w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-xs font-bold border-2 transition-colors ${
-                      realizada ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 text-gray-300 hover:border-emerald-400'
-                    }`}>
-                    {realizada ? '✓' : ''}
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-gray-900 leading-tight">{s.nome ?? `Nº ${s.num_socio}`}</p>
-                    <p className="text-xs text-gray-400">{tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id}</p>
+      {/* SESSÕES DA SEMANA (hoje + próximos 7 dias, excl. natação) */}
+      {(() => {
+        const NATACAO = new Set(['n1','n2','n3','n4','n5','n6','n1f','n2f','n3f','n4f','n5f','n6f'])
+        const hojeStr = new Date().toISOString().slice(0, 10)
+        const semanaFiltrada = sessoesSemana.filter(s => !NATACAO.has(s.tipo_sessao_id))
+        if (semanaFiltrada.length === 0) return null
+        const dias = Array.from(new Set(semanaFiltrada.map(s => s.data_sessao)))
+        return (
+          <section>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">🏋️ Semana</p>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              {dias.map((dia, diaIdx) => {
+                const isHoje = dia === hojeStr
+                const d = new Date(dia + 'T12:00:00')
+                const diaSemana = d.toLocaleDateString('pt-PT', { weekday: 'short' }).replace('.','')
+                const diaMes = d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })
+                const sessoesDia = semanaFiltrada.filter(s => s.data_sessao === dia)
+                const totalDia = sessoesDia.reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0)
+                return (
+                  <div key={dia} className={`flex gap-0 ${diaIdx > 0 ? 'border-t border-gray-100' : ''}`}>
+                    {/* Coluna da data */}
+                    <div className={`w-14 shrink-0 flex flex-col items-center justify-center py-2.5 ${isHoje ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-500'}`}>
+                      <span className="text-xs font-semibold uppercase">{diaSemana}</span>
+                      <span className={`text-lg font-bold leading-tight ${isHoje ? 'text-white' : 'text-gray-800'}`}>{d.getDate()}</span>
+                    </div>
+                    {/* Sessões do dia */}
+                    <div className="flex-1 min-w-0 py-1.5 px-2.5 space-y-1">
+                      {sessoesDia.map(s => {
+                        const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
+                        const realizada = s.estado === 'realizada'
+                        const label = s.nome ?? (s.num_socio ? `Nº ${s.num_socio}` : tipo?.nome ?? s.tipo_sessao_id)
+                        const tipoLabel = tipo?.nome ?? s.tipo_sessao_id
+                        const isTreino = s.tipo_sessao_id.startsWith('treino') || s.tipo_sessao_id === 'sw'
+                        return (
+                          <div key={s.id} className={`flex items-center gap-2 rounded-lg px-2 py-1 ${realizada ? 'bg-emerald-50' : isHoje ? 'bg-amber-50' : 'bg-gray-50'}`}>
+                            {isHoje && (
+                              <button onClick={() => toggleSessao(s)}
+                                className={`w-5 h-5 rounded-full shrink-0 flex items-center justify-center text-xs font-bold border-2 transition-colors ${
+                                  realizada ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 hover:border-emerald-400'
+                                }`}>
+                                {realizada ? '✓' : ''}
+                              </button>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-semibold text-gray-900">{label}</span>
+                              {s.hora_inicio && <span className="text-xs text-gray-400 ml-1.5">{s.hora_inicio.slice(0,5)}</span>}
+                              {!isTreino && <span className="text-xs text-gray-400 ml-1.5">· {tipoLabel}</span>}
+                            </div>
+                            {s.valor_calculado ? <span className="text-xs font-semibold text-gray-600 shrink-0">{fmt(s.valor_calculado)}</span> : null}
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {/* Total do dia */}
+                    {totalDia > 0 && (
+                      <div className="shrink-0 flex items-center justify-center px-2.5 border-l border-gray-100">
+                        <span className="text-xs font-bold text-emerald-700">{fmt(totalDia)}</span>
+                      </div>
+                    )}
                   </div>
-                  {s.conta_horas && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">⏱</span>}
-                  <span className="font-semibold text-sm text-gray-900">{fmt(s.valor_calculado)}</span>
-                </div>
-              )
-            })}
-          </div>
-        </section>
-      )}
+                )
+              })}
+            </div>
+          </section>
+        )
+      })()}
 
       {/* HOJE */}
       <section>

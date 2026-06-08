@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { supabase, Briefing, Sessao, SsTrimestral, BonusTrimestral, EstadoBriefing, Aluno, TipoSessaoRow, ConfigBonus } from '@/lib/supabase'
+import { useEffect, useState, useMemo } from 'react'
+import { supabase, Briefing, Sessao, SsTrimestral, BonusTrimestral, EstadoBriefing, Aluno, TipoSessaoRow, ConfigBonus, ServicoPT } from '@/lib/supabase'
 
 function fmt(v: number | null) {
   if (v == null) return '—'
@@ -45,6 +45,7 @@ export default function FinanceiroPage() {
   const [configBonus, setConfigBonus] = useState<ConfigBonus[]>([])
   const [alunos, setAlunos] = useState<Aluno[]>([])
   const [tiposSessao, setTiposSessao] = useState<TipoSessaoRow[]>([])
+  const [servicosPT, setServicosPT] = useState<ServicoPT[]>([])
   const [loading, setLoading] = useState(true)
   const [mesSelecionado, setMesSelecionado] = useState<string | null>(null)
   const [taxaIrs, setTaxaIrs] = useState(0.115)
@@ -57,7 +58,7 @@ export default function FinanceiroPage() {
 
   async function load() {
     setLoading(true)
-    const [{ data: br }, { data: se }, { data: ssd }, { data: bon }, { data: cf }, { data: ssAtual }, { data: al }, { data: ts }, { data: cb }] = await Promise.all([
+    const [{ data: br }, { data: se }, { data: ssd }, { data: bon }, { data: cf }, { data: ssAtual }, { data: al }, { data: ts }, { data: cb }, { data: sp }] = await Promise.all([
       supabase.from('briefings').select('*').order('id', { ascending: false }),
       supabase.from('sessoes').select('*').order('data_sessao', { ascending: false }),
       supabase.from('ss_trimestral').select('*').order('ano_referencia', { ascending: false }),
@@ -67,6 +68,7 @@ export default function FinanceiroPage() {
       supabase.from('alunos').select('*').order('nome'),
       supabase.from('tipos_sessao').select('*').order('id'),
       supabase.from('config_bonus').select('*').order('horas_threshold'),
+      supabase.from('servicos_pt').select('*').order('nome'),
     ])
     setBriefings((br as Briefing[]) || [])
     setSessoes((se as Sessao[]) || [])
@@ -75,6 +77,7 @@ export default function FinanceiroPage() {
     setAlunos((al as Aluno[]) || [])
     setTiposSessao((ts as TipoSessaoRow[]) || [])
     setConfigBonus((cb as ConfigBonus[]) || [])
+    setServicosPT((sp as ServicoPT[]) || [])
     if (cf) setTaxaIrs((cf as { taxa_irs: number }).taxa_irs)
     if (ssAtual) setSsMensal((ssAtual as SsTrimestral).contribuicao_mensal)
     setLoading(false)
@@ -93,24 +96,25 @@ export default function FinanceiroPage() {
     if (briefing.estado === 'aberto') {
       const sessoesDoMes = sessoes.filter(s => s.mes_briefing === briefing.id && s.estado === 'realizada')
       const bruto = sessoesDoMes.reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0)
-      const horas = sessoesDoMes.filter(s => s.conta_horas).reduce((acc, s) => {
-        const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
-        return acc + (tipo?.duracao_min ?? 0) / 60
-      }, 0)
+      // Horas = planos vendidos este mês (não sessões reais)
+      const horas = horasPlanoMensal
       const irs = bruto * taxaIrs
       const liquido = bruto - irs - ssMensal
       const trim = Math.ceil(briefing.mes / 3)
-      // Último mês do trimestre (3, 6, 9, 12) — calcular bónus automaticamente
+      // Último mês do trimestre — calcular bónus com horas de plano do trimestre
       if (briefing.mes % 3 === 0 && configBonus.length > 0) {
-        const sessTrimestre = sessoes.filter(s => {
-          if (!s.mes_briefing || !s.conta_horas || s.estado !== 'realizada') return false
-          const [a, m] = s.mes_briefing.split('-').map(Number)
-          return a === briefing.ano && Math.ceil(m / 3) === trim
+        // Soma horas_contadas dos briefings fechados do mesmo trimestre + mês actual
+        const mesesDoTrim = [1, 2, 3].map(i => {
+          const m = (trim - 1) * 3 + i
+          return `${briefing.ano}-${String(m).padStart(2, '0')}`
         })
-        const horasTrim = Math.round(sessTrimestre.reduce((acc, s) => {
-          const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
-          return acc + (tipo?.duracao_min ?? 0) / 60
-        }, 0) * 100) / 100
+        const horasTrim = Math.round(
+          mesesDoTrim.reduce((acc, mes) => {
+            if (mes === briefing.id) return acc + horasPlanoMensal
+            const br = briefings.find(b => b.id === mes)
+            return acc + (br?.horas_contadas || 0)
+          }, 0) * 100
+        ) / 100
         // Regra com maior threshold atingido
         const regraAtingida = [...configBonus]
           .sort((a, b) => b.horas_threshold - a.horas_threshold)
@@ -145,14 +149,38 @@ export default function FinanceiroPage() {
     load()
   }
 
+  async function sincronizarBriefingsAbertos(sessoesAtuais: Sessao[], _tiposAtuais: TipoSessaoRow[], briefingsAtuais: Briefing[]) {
+    const abertos = briefingsAtuais.filter(b => b.estado === 'aberto')
+    for (const b of abertos) {
+      const sessoesDoMes = sessoesAtuais.filter(s => s.mes_briefing === b.id && s.estado === 'realizada')
+      const bruto = Math.round(sessoesDoMes.reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0) * 100) / 100
+      const irs = Math.round(bruto * taxaIrs * 100) / 100
+      const liquido = Math.round((bruto - irs - ssMensal) * 100) / 100
+      // horas = planos vendidos (não sessões reais)
+      await supabase.from('briefings').update({ total_bruto: bruto, irs_retido: irs, ss_pagar: ssMensal, liquido, horas_contadas: horasPlanoMensal }).eq('id', b.id)
+    }
+  }
+
   async function eliminarSessao(id: string) {
     await supabase.from('sessoes').delete().eq('id', id)
+    const [{ data: se }, { data: brFrescos }] = await Promise.all([
+      supabase.from('sessoes').select('*').order('data_sessao', { ascending: false }),
+      supabase.from('briefings').select('*').order('id', { ascending: false }),
+    ])
+    const sessoesAtuais = (se as Sessao[]) || []
+    await sincronizarBriefingsAbertos(sessoesAtuais, tiposSessao, (brFrescos as Briefing[]) || [])
     load()
   }
 
   async function toggleEstadoSessao(sessao: Sessao) {
     const novoEstado = sessao.estado === 'realizada' ? 'nao_realizada' : 'realizada'
     await supabase.from('sessoes').update({ estado: novoEstado }).eq('id', sessao.id)
+    const [{ data: se }, { data: brFrescos }] = await Promise.all([
+      supabase.from('sessoes').select('*').order('data_sessao', { ascending: false }),
+      supabase.from('briefings').select('*').order('id', { ascending: false }),
+    ])
+    const sessoesAtuais = (se as Sessao[]) || []
+    await sincronizarBriefingsAbertos(sessoesAtuais, tiposSessao, (brFrescos as Briefing[]) || [])
     load()
   }
 
@@ -169,6 +197,57 @@ export default function FinanceiroPage() {
     load()
   }
 
+  async function recalcularSessoesBriefing(briefingId: string) {
+    const { data: niveisData } = await supabase.from('niveis_remuneracao').select('*').order('horas_min')
+    const niveis = (niveisData || []) as { horas_min: number; horas_max: number | null; valor_45min: number; valor_60min: number }[]
+    const repTipo = tiposSessao.find(t => t.id === 'rep')
+
+    // Buscar sessões directamente da BD (estado mais fresco)
+    const { data: sesData } = await supabase
+      .from('sessoes').select('*')
+      .eq('mes_briefing', briefingId).eq('estado', 'realizada')
+      .order('data_sessao')
+    const sessoesDoMes = (sesData as Sessao[]) || []
+
+    // Nivel fixo para o mês — determinado pelas horas totais de planos vendidos
+    const nivelDoMes = niveis
+      .filter(n => horasPlanoMensal >= n.horas_min && (n.horas_max == null || horasPlanoMensal < n.horas_max))
+      .pop()
+
+    let atualizadas = 0
+    for (const s of sessoesDoMes) {
+      // Buscar aluno por num_socio (contacto pode diferir ligeiramente)
+      const aluno = alunos.find(a => a.num_socio === s.num_socio && a.contacto === s.contacto)
+              ?? alunos.find(a => a.num_socio === s.num_socio)
+      const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
+      const contaHoras = !!aluno?.convertido && !!tipo?.conta_para_nivel
+
+      let valorCalculado: number | null = s.valor_calculado
+
+      if (s.num_socio === 'MI' || tipo?.id === 'mi') {
+        const valorRep = repTipo?.valor_fixo ?? 0
+        const duracaoMin = tipo?.duracao_min ?? 60
+        valorCalculado = valorRep * Math.ceil(duracaoMin / 60)
+      } else if (tipo?.categoria === 'avaliacao') {
+        valorCalculado = tipo.valor_fixo ?? 0
+      } else if (tipo?.categoria === 'treino' && aluno?.convertido && nivelDoMes) {
+        // Valor = taxa do nivel actual para a duração do treino
+        valorCalculado = (tipo.duracao_min ?? 60) <= 45 ? nivelDoMes.valor_45min : nivelDoMes.valor_60min
+      }
+
+      await supabase.from('sessoes').update({ valor_calculado: valorCalculado, conta_horas: contaHoras }).eq('id', s.id)
+      atualizadas++
+    }
+
+    // Sync o briefing com os novos valores
+    const { data: seFrescos } = await supabase.from('sessoes').select('*').order('data_sessao', { ascending: false })
+    const { data: brFrescos } = await supabase.from('briefings').select('*').order('id', { ascending: false })
+    await sincronizarBriefingsAbertos((seFrescos as Sessao[]) || [], tiposSessao, (brFrescos as Briefing[]) || [])
+
+    console.log(`Recalcular ${briefingId}: ${atualizadas} sessões actualizadas`)
+    load()
+  }
+
   async function registarSessao() {
     if (!formSessao.num_socio || !formSessao.tipo_sessao_id || !formSessao.data_sessao) return
     setSaving(true)
@@ -182,22 +261,24 @@ export default function FinanceiroPage() {
       await supabase.from('briefings').insert({ id: mesBriefing, ano: d.getFullYear(), mes: d.getMonth() + 1, estado: 'aberto', total_bruto: 0, irs_retido: 0, ss_pagar: ssMensal, liquido: 0, horas_contadas: 0 })
     }
 
-    const contaHoras = !!aluno?.convertido && tipo?.conta_para_nivel === true
+    const contaHoras = !!aluno?.convertido && !!tipo?.conta_para_nivel
 
     let valorCalculado: number | null = null
     if (tipo?.categoria === 'avaliacao') {
       valorCalculado = tipo.valor_fixo ?? 0
+    } else if (tipo?.id === 'mi') {
+      // MI: valor igual ao de rep, por hora (meia hora conta como 1 hora)
+      const repTipo = tiposSessao.find(t => t.id === 'rep')
+      const valorRep = repTipo?.valor_fixo ?? 0
+      const horas = Math.ceil((tipo.duracao_min ?? 60) / 60)
+      valorCalculado = valorRep * horas
     } else if (tipo?.categoria === 'treino' && aluno?.convertido) {
-      const { data: niveis } = await supabase.from('niveis_remuneracao').select('*').order('horas_min')
-      const sessoesDoMes = sessoes.filter(s => s.mes_briefing === mesBriefing && s.conta_horas && s.estado === 'realizada')
-      const horasMes = sessoesDoMes.reduce((acc, s) => {
-        const t = tiposSessao.find(x => x.id === s.tipo_sessao_id)
-        return acc + (t?.duracao_min ?? 0) / 60
-      }, 0) + (tipo.duracao_min ?? 0) / 60
-      const nivel = ((niveis || []) as { horas_min: number; horas_max: number | null; valor_45min: number; valor_60min: number }[])
-        .filter(n => horasMes >= n.horas_min && (n.horas_max == null || horasMes < n.horas_max))
+      const { data: niveisData } = await supabase.from('niveis_remuneracao').select('*').order('horas_min')
+      // Nivel determinado pelas horas totais de planos vendidos (não sessões reais)
+      const nivel = ((niveisData || []) as { horas_min: number; horas_max: number | null; valor_45min: number; valor_60min: number }[])
+        .filter(n => horasPlanoMensal >= n.horas_min && (n.horas_max == null || horasPlanoMensal < n.horas_max))
         .pop()
-      if (nivel) valorCalculado = tipo.duracao_min === 45 ? nivel.valor_45min : nivel.valor_60min
+      if (nivel) valorCalculado = (tipo.duracao_min ?? 60) <= 45 ? nivel.valor_45min : nivel.valor_60min
     }
 
     await supabase.from('sessoes').insert({
@@ -211,23 +292,51 @@ export default function FinanceiroPage() {
       conta_horas: contaHoras,
       valor_calculado: valorCalculado,
     })
+    // Buscar estado fresco para sincronizar (evita stale closure em briefings)
+    const [{ data: se }, { data: brFrescos }] = await Promise.all([
+      supabase.from('sessoes').select('*').order('data_sessao', { ascending: false }),
+      supabase.from('briefings').select('*').order('id', { ascending: false }),
+    ])
+    const sessoesAtuais = (se as Sessao[]) || []
+    const briefingsFrescos = (brFrescos as Briefing[]) || []
+    await sincronizarBriefingsAbertos(sessoesAtuais, tiposSessao, briefingsFrescos)
     setNovasSessao(false)
     setSaving(false)
     load()
   }
 
-  // Progresso bónus trimestre atual
+  // Horas mensais dos planos vendidos (alunos PT activos)
+  const horasPlanoMensal = useMemo(() => {
+    return Math.round(
+      alunos
+        .filter(a => a.convertido && a.estado === 'ativo')
+        .reduce((acc, a) => {
+          const sv = servicosPT.find(s => s.nome === a.plano_pt)
+          if (sv) {
+            const dur = (sv.duracao_min ?? 60) / 60
+            const sessoesSemana = sv.sessoes_semana || 1
+            const mult = sv.tipo === 'semanal' ? 4.33 : 1
+            return acc + sessoesSemana * mult * dur
+          }
+          return acc + (a.horas_pt_mensais || 0)
+        }, 0) * 100
+    ) / 100
+  }, [alunos, servicosPT])
+
+  // Progresso bónus trimestre atual — horas = planos vendidos por mês com briefing
   const hoje = new Date()
   const trimAtual = Math.ceil((hoje.getMonth() + 1) / 3)
   const anoAtual = hoje.getFullYear()
   const mesInicio = (trimAtual - 1) * 3 + 1
   const mesesTrim = [mesInicio, mesInicio + 1, mesInicio + 2].map(m => `${anoAtual}-${String(m).padStart(2, '0')}`)
-  const horasTrimAtual = Math.round(sessoes.filter(s =>
-    s.mes_briefing && mesesTrim.includes(s.mes_briefing) && s.conta_horas && s.estado === 'realizada'
-  ).reduce((acc, s) => {
-    const tipo = tiposSessao.find(t => t.id === s.tipo_sessao_id)
-    return acc + (tipo?.duracao_min ?? 0) / 60
-  }, 0) * 10) / 10
+  const horasTrimAtual = Math.round(
+    mesesTrim.reduce((acc, mes) => {
+      const br = briefings.find(b => b.id === mes)
+      if (!br) return acc
+      // Briefing fechado: usar horas_contadas gravadas; aberto: usar plano actual
+      return acc + (br.estado !== 'aberto' ? (br.horas_contadas || 0) : horasPlanoMensal)
+    }, 0) * 10
+  ) / 10
   const melhorRegraAtingida = [...configBonus]
     .sort((a, b) => b.horas_threshold - a.horas_threshold)
     .find(cb => horasTrimAtual >= cb.horas_threshold && (cb.horas_max == null || horasTrimAtual <= cb.horas_max))
@@ -241,6 +350,21 @@ export default function FinanceiroPage() {
     acc[s.mes_briefing].push(s)
     return acc
   }, {})
+
+  // Valores ao vivo para briefings abertos
+  // bruto = soma dos valor_calculado das sessões; horas = plano mensal vendido
+  const liveValores = useMemo(() => {
+    const map: Record<string, { bruto: number; horas: number; irs: number; liquido: number }> = {}
+    for (const b of briefings) {
+      if (b.estado !== 'aberto') continue
+      const sessoesDoMes = sessoes.filter(s => s.mes_briefing === b.id && s.estado === 'realizada')
+      const bruto = Math.round(sessoesDoMes.reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0) * 100) / 100
+      const irs = Math.round(bruto * taxaIrs * 100) / 100
+      const liquido = Math.round((bruto - irs - ssMensal) * 100) / 100
+      map[b.id] = { bruto, horas: horasPlanoMensal, irs, liquido }
+    }
+    return map
+  }, [briefings, sessoes, horasPlanoMensal, taxaIrs, ssMensal])
 
   const alunoSelecionado = alunos.find(a => a.num_socio === formSessao.num_socio && a.contacto === formSessao.contacto)
 
@@ -276,7 +400,17 @@ export default function FinanceiroPage() {
               <select value={`${formSessao.num_socio}|${formSessao.contacto}`}
                 onChange={(e) => {
                   const [num_socio, contacto] = e.target.value.split('|')
-                  setFormSessao({ ...formSessao, num_socio, contacto })
+                  const aluno = alunos.find(a => a.num_socio === num_socio && a.contacto === contacto)
+                  let tipo_sessao_id = formSessao.tipo_sessao_id
+                  if (aluno?.plano_pt) {
+                    const sv = servicosPT.find(s => s.nome === aluno.plano_pt)
+                    if (sv?.duracao_min) {
+                      const match = tiposSessao.find(t => t.categoria === 'treino' && t.duracao_min === sv.duracao_min)
+                      if (match) tipo_sessao_id = match.id
+                      else tipo_sessao_id = sv.duracao_min <= 45 ? 'treino_45' : 'treino_60'
+                    }
+                  }
+                  setFormSessao({ ...formSessao, num_socio, contacto, tipo_sessao_id })
                 }}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="|">Seleccionar aluno...</option>
@@ -385,45 +519,97 @@ export default function FinanceiroPage() {
                     </div>
 
                     <div className="mt-3 grid grid-cols-4 gap-3">
-                      <FinRow label="Bruto" value={fmt(b.total_bruto)} />
-                      <FinRow label={`IRS ${(taxaIrs * 100).toFixed(1)}%`} value={`-${fmt(b.irs_retido)}`} negative />
-                      <FinRow label="SS" value={`-${fmt(b.ss_pagar)}`} negative />
-                      <FinRow label="Líquido" value={fmt(b.liquido)} highlight />
+                      {(() => {
+                        const live = liveValores[b.id]
+                        const bruto = live ? live.bruto : b.total_bruto
+                        const irs = live ? live.irs : b.irs_retido
+                        const ss = b.ss_pagar
+                        const liquido = live ? live.liquido : b.liquido
+                        const horas = live ? live.horas : b.horas_contadas
+                        return <>
+                          <FinRow label={`Bruto${live ? ' ●' : ''}`} value={fmt(bruto)} />
+                          <FinRow label={`IRS ${(taxaIrs * 100).toFixed(1)}%`} value={`-${fmt(irs)}`} negative />
+                          <FinRow label="SS" value={`-${fmt(ss)}`} negative />
+                          <FinRow label="Líquido" value={fmt(liquido)} highlight />
+                          <FinRow label={`Horas${live ? ' ●' : ''}`} value={horas != null ? `${horas}h` : '—'} />
+                        </>
+                      })()}
                     </div>
 
-                    <button onClick={() => setMesSelecionado(mesSelecionado === b.id ? null : b.id)}
-                      className="mt-3 text-sm text-blue-600 font-medium hover:underline">
-                      {mesSelecionado === b.id ? 'Ocultar sessões' : `Ver sessões (${sessoesByMes[b.id]?.length ?? 0})`}
-                    </button>
+                    <div className="mt-3 flex items-center gap-3">
+                      <button onClick={() => setMesSelecionado(mesSelecionado === b.id ? null : b.id)}
+                        className="text-sm text-blue-600 font-medium hover:underline">
+                        {mesSelecionado === b.id ? 'Ocultar sessões' : `Ver sessões (${sessoesByMes[b.id]?.length ?? 0})`}
+                      </button>
+                      {b.estado === 'aberto' && (
+                        <button onClick={() => recalcularSessoesBriefing(b.id)}
+                          className="text-sm text-amber-600 font-medium hover:underline">
+                          ↻ Recalcular valores
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  {mesSelecionado === b.id && (
-                    <div className="border-t border-gray-100 bg-gray-50/50 p-3 space-y-1.5">
-                      {(sessoesByMes[b.id] || []).length === 0
-                        ? <p className="text-sm text-gray-400 py-1">Sem sessões registadas.</p>
-                        : (sessoesByMes[b.id] || []).map((s) => {
-                          const naoRealizada = s.estado !== 'realizada'
-                          return (
-                            <div key={s.id} className={`flex items-center gap-2 rounded-xl px-3 py-2 ${naoRealizada ? 'bg-red-50 text-gray-400' : 'bg-white border border-gray-100 text-gray-700'}`}>
-                              <span className={`flex-1 text-sm ${naoRealizada ? 'line-through' : ''}`}>
-                                {s.data_sessao} · {tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id}
-                                {s.conta_horas && <span className="ml-1 text-xs text-blue-600 font-medium">⏱</span>}
-                              </span>
-                              <span className="font-semibold text-sm">{fmt(s.valor_calculado)}</span>
-                              <button onClick={() => toggleEstadoSessao(s)} title={naoRealizada ? 'Marcar realizada' : 'Marcar não realizada'}
-                                className="text-gray-400 hover:text-amber-600 transition-colors text-lg leading-none">
-                                {naoRealizada ? '↩' : '✕'}
-                              </button>
-                              <button onClick={() => eliminarSessao(s.id)} title="Eliminar"
-                                className="text-gray-400 hover:text-red-500 transition-colors">
-                                🗑
-                              </button>
-                            </div>
-                          )
-                        })
-                      }
-                    </div>
-                  )}
+                  {mesSelecionado === b.id && (() => {
+                    const todasSessoes = sessoesByMes[b.id] || []
+                    const GRUPOS: { label: string; ids: string[] }[] = [
+                      { label: 'Treinos PT', ids: ['treino_60', 'treino_45', 'treino_30'] },
+                      { label: 'Rep / Avaliação', ids: ['rep', 'sw'] },
+                      { label: 'OI', ids: ['oi'] },
+                      { label: 'Treino Oferta', ids: ['treino_oferta'] },
+                      { label: 'Natação', ids: ['n1','n2','n3','n4','n5','n6','n1f','n2f','n3f','n4f','n5f','n6f'] },
+                      { label: 'Sala (MI)', ids: ['mi'] },
+                    ]
+                    const renderSessao = (s: Sessao) => {
+                      const naoRealizada = s.estado !== 'realizada'
+                      const nomeAluno = s.num_socio ? (alunos.find(a => a.num_socio === s.num_socio && a.contacto === s.contacto)?.nome ?? s.num_socio) : null
+                      const tipoNome = tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id
+                      return (
+                        <div key={s.id} className={`flex items-center gap-2 rounded-xl px-3 py-2 ${naoRealizada ? 'bg-red-50 text-gray-400' : 'bg-white border border-gray-100 text-gray-700'}`}>
+                          <span className={`flex-1 text-sm ${naoRealizada ? 'line-through' : ''}`}>
+                            {s.data_sessao}{nomeAluno ? ` · ${nomeAluno}` : ''}{nomeAluno ? ` · ${tipoNome}` : ` · ${tipoNome}`}
+                            {s.conta_horas && <span className="ml-1 text-xs text-blue-600 font-medium">⏱</span>}
+                          </span>
+                          <span className="font-semibold text-sm">{fmt(s.valor_calculado)}</span>
+                          <button onClick={() => toggleEstadoSessao(s)} title={naoRealizada ? 'Marcar realizada' : 'Marcar não realizada'}
+                            className="text-gray-400 hover:text-amber-600 transition-colors text-lg leading-none">
+                            {naoRealizada ? '↩' : '✕'}
+                          </button>
+                          <button onClick={() => eliminarSessao(s.id)} title="Eliminar"
+                            className="text-gray-400 hover:text-red-500 transition-colors">
+                            🗑
+                          </button>
+                        </div>
+                      )
+                    }
+                    const restantes = new Set(todasSessoes.map(s => s.id))
+                    const gruposComSessoes = GRUPOS.map(g => {
+                      const ss = todasSessoes.filter(s => g.ids.includes(s.tipo_sessao_id))
+                      ss.forEach(s => restantes.delete(s.id))
+                      return { ...g, sessoes: ss }
+                    }).filter(g => g.sessoes.length > 0)
+                    const outras = todasSessoes.filter(s => restantes.has(s.id))
+                    if (outras.length > 0) gruposComSessoes.push({ label: 'Outros', ids: [], sessoes: outras })
+                    return (
+                      <div className="border-t border-gray-100 bg-gray-50/50 p-3 space-y-3">
+                        {todasSessoes.length === 0
+                          ? <p className="text-sm text-gray-400 py-1">Sem sessões registadas.</p>
+                          : gruposComSessoes.map(g => {
+                            const totalGrupo = g.sessoes.filter(s => s.estado === 'realizada').reduce((acc, s) => acc + (s.valor_calculado ?? 0), 0)
+                            return (
+                              <div key={g.label}>
+                                <div className="flex items-center justify-between mb-1">
+                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{g.label} ({g.sessoes.length})</p>
+                                  {totalGrupo > 0 && <p className="text-xs font-bold text-emerald-700">{fmt(totalGrupo)}</p>}
+                                </div>
+                                <div className="space-y-1">{g.sessoes.map(renderSessao)}</div>
+                              </div>
+                            )
+                          })
+                        }
+                      </div>
+                    )
+                  })()}
                 </div>
               ))}
             </div>
