@@ -184,8 +184,8 @@ export default function BriefingPage() {
           <div className="space-y-1.5">
             {avaliacoesAmanha.map(s => {
               const hora = s.hora_inicio ? s.hora_inicio.slice(0, 5) : null
-              const nome = s.nome ?? `Nº ${s.num_socio}`
-              const link = gerarLinkWhatsApp(s.contacto, gerarMensagemLembrete(nome, hora))
+              const nome = s.nome ?? (s.num_socio ? `Nº ${s.num_socio}` : tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id)
+              const link = s.contacto ? gerarLinkWhatsApp(s.contacto, gerarMensagemLembrete(nome, hora)) : null
               return (
                 <div key={s.id} className="bg-white rounded-xl shadow-sm border border-blue-100 p-3">
                   <div className="flex items-center gap-2 mb-2.5">
@@ -193,10 +193,12 @@ export default function BriefingPage() {
                     {hora && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">{hora}</span>}
                     <span className="text-xs text-gray-400 ml-auto">{tiposSessao.find(t => t.id === s.tipo_sessao_id)?.nome ?? s.tipo_sessao_id}</span>
                   </div>
-                  <a href={link} target="_blank" rel="noopener noreferrer"
-                    className="block w-full text-center text-sm px-3 py-1.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors">
-                    Enviar lembrete WhatsApp
-                  </a>
+                  {link && (
+                    <a href={link} target="_blank" rel="noopener noreferrer"
+                      className="block w-full text-center text-sm px-3 py-1.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors">
+                      Enviar lembrete WhatsApp
+                    </a>
+                  )}
                 </div>
               )
             })}

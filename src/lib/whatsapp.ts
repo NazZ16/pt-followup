@@ -2,7 +2,8 @@ import { TipoAluno, TipoFollowup } from './supabase'
 
 const DIAS: Record<TipoFollowup, number> = { '7d': 7, '30d': 30, '60d': 60, '120d': 120 }
 
-function formatPhone(contacto: string): string {
+function formatPhone(contacto: string | null | undefined): string {
+  if (!contacto) return ''
   const digits = contacto.replace(/\D/g, '')
   if (digits.startsWith('351')) return digits
   if (digits.startsWith('9') && digits.length === 9) return `351${digits}`
