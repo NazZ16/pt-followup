@@ -64,7 +64,8 @@ function syncCalendarToSupabase() {
 // BACKFILL DESDE 1 DE JUNHO — correr UMA VEZ manualmente
 // ============================================================
 function sincronizarDesde1Junho() {
-  const inicio = new Date('2026-06-01T00:00:00');
+  // Começa meia hora antes do dia 1 para evitar problemas de timezone
+  const inicio = new Date('2026-05-31T23:30:00');
   const fim = new Date(); // apenas até hoje
   sincronizarPeriodo(inicio, fim);
   Logger.log('Backfill desde 1 de junho concluído.');
@@ -316,21 +317,22 @@ function registarSessaoStandalone(eventId, tipoSessaoId, dataEvento, horaInicio,
     valorCalculado = dur <= 45 ? nivelAtual.valor_45min : nivelAtual.valor_60min;
   }
 
-  // Procurar por calendar_event_id
-  const existente = supabaseFetch(
-    '/rest/v1/sessoes?calendar_event_id=eq.' + encodeURIComponent(eventId) + '&select=id,data_sessao,mes_briefing',
-    'GET'
-  );
-
   const dataObj     = new Date(dataEvento + 'T12:00:00');
   const mesBriefing = dataObj.getFullYear() + '-' + String(dataObj.getMonth() + 1).padStart(2, '0');
   garantirBriefing(mesBriefing, dataObj.getFullYear(), dataObj.getMonth() + 1);
 
   const logLabel = tipoSessaoId === 'mi' ? 'MI' : 'Natação ' + tipoSessaoId.toUpperCase();
 
-  if (existente && existente.length > 0) {
-    // Atualizar sessão existente
-    const sessaoId = existente[0].id;
+  // Procurar por calendar_event_id (se a coluna existir)
+  const existentePorId = supabaseFetch(
+    '/rest/v1/sessoes?calendar_event_id=eq.' + encodeURIComponent(eventId) + '&select=id',
+    'GET'
+  );
+  const colunaCEIdExiste = Array.isArray(existentePorId); // erro = objeto, array = coluna existe
+
+  if (colunaCEIdExiste && existentePorId.length > 0) {
+    // Atualizar sessão existente pelo calendar_event_id
+    const sessaoId = existentePorId[0].id;
     const patch = {
       tipo_sessao_id:  tipoSessaoId,
       data_sessao:     dataEvento,
@@ -339,17 +341,25 @@ function registarSessaoStandalone(eventId, tipoSessaoId, dataEvento, horaInicio,
       valor_calculado: valorCalculado,
     };
     const resp = supabaseFetch('/rest/v1/sessoes?id=eq.' + sessaoId, 'PATCH', patch, { 'Prefer': 'return=minimal' });
-    if (resp && resp.error) {
-      Logger.log('Erro update sessão standalone: ' + JSON.stringify(resp));
-    } else {
-      Logger.log('Sessão ' + logLabel + ' actualizada: ' + dataEvento + ' | ' + valorCalculado + '€');
-    }
+    if (resp && resp.error) Logger.log('Erro update sessão standalone: ' + JSON.stringify(resp));
+    else Logger.log('Sessão ' + logLabel + ' actualizada: ' + dataEvento + ' | ' + valorCalculado + '€');
     return;
+  }
+
+  // Fallback: verificar por data + tipo (evita duplicados se coluna ainda não existe)
+  if (!colunaCEIdExiste) {
+    const existentePorData = supabaseFetch(
+      '/rest/v1/sessoes?num_socio=is.null&data_sessao=eq.' + dataEvento + '&tipo_sessao_id=eq.' + tipoSessaoId + '&select=id',
+      'GET'
+    );
+    if (existentePorData && existentePorData.length > 0) {
+      Logger.log('Sessão ' + logLabel + ' já existe (sem calendar_event_id): ' + dataEvento);
+      return;
+    }
   }
 
   // Inserir nova sessão
   const payload = {
-    calendar_event_id: eventId,
     tipo_sessao_id:    tipoSessaoId,
     data_sessao:       dataEvento,
     hora_inicio:       horaInicio || null,
@@ -359,6 +369,7 @@ function registarSessaoStandalone(eventId, tipoSessaoId, dataEvento, horaInicio,
     conta_horas:       false,
     valor_calculado:   valorCalculado,
   };
+  if (colunaCEIdExiste) payload.calendar_event_id = eventId;
   const resp = supabaseFetch('/rest/v1/sessoes', 'POST', payload, { 'Prefer': 'return=minimal' });
   if (resp && resp.error) {
     Logger.log('Erro sessão standalone: ' + JSON.stringify(resp));
@@ -389,15 +400,16 @@ function registarSessaoComValor(parsed, eventId, dataEvento, horaInicio, nivelAt
   const mesBriefing = dataObj.getFullYear() + '-' + String(dataObj.getMonth() + 1).padStart(2, '0');
   garantirBriefing(mesBriefing, dataObj.getFullYear(), dataObj.getMonth() + 1);
 
-  // Procurar por calendar_event_id
-  const existente = supabaseFetch(
+  // Procurar por calendar_event_id (se a coluna existir)
+  const existentePorId = supabaseFetch(
     '/rest/v1/sessoes?calendar_event_id=eq.' + encodeURIComponent(eventId) + '&select=id',
     'GET'
   );
+  const colunaCEIdExiste = Array.isArray(existentePorId);
 
-  if (existente && existente.length > 0) {
+  if (colunaCEIdExiste && existentePorId.length > 0) {
     // Actualizar — data, tipo, aluno ou valor podem ter mudado
-    const sessaoId = existente[0].id;
+    const sessaoId = existentePorId[0].id;
     const patch = {
       num_socio:       numSocio,
       contacto:        contacto || '',
@@ -409,17 +421,27 @@ function registarSessaoComValor(parsed, eventId, dataEvento, horaInicio, nivelAt
       valor_calculado: valorCalculado,
     };
     const resp = supabaseFetch('/rest/v1/sessoes?id=eq.' + sessaoId, 'PATCH', patch, { 'Prefer': 'return=minimal' });
-    if (resp && resp.error) {
-      Logger.log('Erro update sessão: ' + JSON.stringify(resp));
-    } else {
-      Logger.log('Sessão actualizada: ' + parsed.tipoSessaoId + ' | ' + parsed.nome + ' | ' + dataEvento);
-    }
+    if (resp && resp.error) Logger.log('Erro update sessão: ' + JSON.stringify(resp));
+    else Logger.log('Sessão actualizada: ' + parsed.tipoSessaoId + ' | ' + parsed.nome + ' | ' + dataEvento);
     return;
+  }
+
+  // Fallback: verificar por aluno + data + tipo (evita duplicados se coluna ainda não existe)
+  if (!colunaCEIdExiste) {
+    const existentePorData = supabaseFetch(
+      '/rest/v1/sessoes?num_socio=eq.' + encodeURIComponent(numSocio) +
+      '&data_sessao=eq.' + dataEvento +
+      '&tipo_sessao_id=eq.' + parsed.tipoSessaoId + '&select=id',
+      'GET'
+    );
+    if (existentePorData && existentePorData.length > 0) {
+      Logger.log('Sessão já existe (sem calendar_event_id): ' + parsed.nome + ' ' + dataEvento);
+      return;
+    }
   }
 
   // Inserir nova sessão
   const payload = {
-    calendar_event_id: eventId,
     num_socio:         numSocio,
     contacto:          contacto || '',
     tipo_sessao_id:    parsed.tipoSessaoId,
@@ -431,6 +453,7 @@ function registarSessaoComValor(parsed, eventId, dataEvento, horaInicio, nivelAt
     conta_horas:       contaHoras,
     valor_calculado:   valorCalculado,
   };
+  if (colunaCEIdExiste) payload.calendar_event_id = eventId;
   const resp = supabaseFetch('/rest/v1/sessoes', 'POST', payload, { 'Prefer': 'return=minimal' });
   if (resp && resp.error) {
     Logger.log('Erro ao registar sessão: ' + JSON.stringify(resp));
