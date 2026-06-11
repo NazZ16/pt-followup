@@ -90,10 +90,10 @@ function sincronizarPeriodo(inicio, fim) {
     const titulo = evento.getTitle().trim();
     if (titulo.toLowerCase().startsWith(PREFIXO_FOLLOWUP)) { ignorados++; return; }
 
-    const eventId    = evento.getId();
     const startTime  = evento.getStartTime();
     const endTime    = evento.getEndTime();
     const dataEvento = Utilities.formatDate(startTime, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    const eventId    = evento.getId() + '::' + dataEvento; // unique per occurrence for recurring events
     const horaInicio = Utilities.formatDate(startTime, Session.getScriptTimeZone(), 'HH:mm');
     const duracaoMin = Math.round((endTime - startTime) / 60000);
 
@@ -710,6 +710,46 @@ function jsonResponse(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ============================================================
+// DIAGNÓSTICO — correr manualmente para ver o que está a falhar
+// ============================================================
+function diagnosticar() {
+  // 1. Verificar se a coluna calendar_event_id existe
+  const teste = supabaseFetch('/rest/v1/sessoes?calendar_event_id=is.null&limit=1&select=id', 'GET');
+  Logger.log('Coluna calendar_event_id existe: ' + Array.isArray(teste));
+
+  // 2. Verificar tipos_sessao que o script usa
+  const tipos = supabaseFetch('/rest/v1/tipos_sessao?select=id,nome,categoria,valor_fixo', 'GET') || [];
+  const standaloneTipos = ['mi','n1','n2','n3','n4','n5','n6','n1f','n2f','n3f','n4f','n5f','n6f'];
+  standaloneTipos.forEach(function(t) {
+    const encontrado = tipos.find(function(x) { return x.id === t; });
+    Logger.log('Tipo "' + t + '": ' + (encontrado ? 'OK (valor_fixo=' + encontrado.valor_fixo + ')' : 'NÃO ENCONTRADO NA BD'));
+  });
+
+  // 3. Verificar briefing de junho
+  const briefingJunho = supabaseFetch('/rest/v1/briefings?id=eq.2026-06&select=id,estado', 'GET');
+  Logger.log('Briefing 2026-06: ' + JSON.stringify(briefingJunho));
+
+  // 4. Testar um INSERT simples de natação
+  const payloadTeste = {
+    tipo_sessao_id: 'n1',
+    data_sessao: '2026-06-01',
+    estado: 'realizada',
+    mes_briefing: '2026-06',
+    incluida_briefing: false,
+    conta_horas: false,
+    valor_calculado: 0,
+  };
+  const respTeste = supabaseFetch('/rest/v1/sessoes', 'POST', payloadTeste, { 'Prefer': 'return=representation' });
+  Logger.log('Teste INSERT n1: ' + JSON.stringify(respTeste));
+
+  // Se inseriu, apagar o registo de teste
+  if (Array.isArray(respTeste) && respTeste.length > 0 && respTeste[0].id) {
+    supabaseFetch('/rest/v1/sessoes?id=eq.' + respTeste[0].id, 'DELETE', null, {});
+    Logger.log('Registo de teste apagado.');
+  }
 }
 
 // ============================================================
