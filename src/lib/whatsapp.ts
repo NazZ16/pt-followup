@@ -37,6 +37,11 @@ const MENSAGENS: Record<TipoAluno, Record<TipoFollowup, (nome: string) => string
   },
 }
 
+export function gerarMensagemPlanoPT(nome: string): string {
+  const primeiroNome = nome.split(' ')[0]
+  return `Olá ${primeiroNome}! O teu plano de treino já se encontra disponível na app. Qualquer dúvida é só contactar. 💪`
+}
+
 export function gerarMensagem(nome: string, tipo: TipoAluno, marco: TipoFollowup): string {
   return MENSAGENS[tipo][marco](nome)
 }
