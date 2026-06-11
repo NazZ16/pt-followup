@@ -60,7 +60,7 @@ export default function FinanceiroPage() {
     setLoading(true)
     const [{ data: br }, { data: se }, { data: ssd }, { data: bon }, { data: cf }, { data: ssAtual }, { data: al }, { data: ts }, { data: cb }, { data: sp }] = await Promise.all([
       supabase.from('briefings').select('*').order('id', { ascending: false }),
-      supabase.from('sessoes').select('*').order('data_sessao', { ascending: false }),
+      supabase.from('sessoes').select('*').order('data_sessao', { ascending: false }).limit(5000),
       supabase.from('ss_trimestral').select('*').order('ano_referencia', { ascending: false }),
       supabase.from('bonus_trimestral').select('*').order('ano', { ascending: false }),
       supabase.from('config_fiscal').select('*').order('vigente_desde', { ascending: false }).limit(1).single(),
@@ -245,6 +245,22 @@ export default function FinanceiroPage() {
     await sincronizarBriefingsAbertos((seFrescos as Sessao[]) || [], tiposSessao, (brFrescos as Briefing[]) || [])
 
     console.log(`Recalcular ${briefingId}: ${atualizadas} sessões actualizadas`)
+    load()
+  }
+
+  async function corrigirMesBriefing() {
+    // Corrige sessões com mes_briefing null ou incorreto com base em data_sessao
+    const sessoesParaCorrigir = sessoes.filter(s => {
+      if (!s.data_sessao) return false
+      const mes = s.data_sessao.slice(0, 7)
+      return !s.mes_briefing || s.mes_briefing !== mes
+    })
+    if (sessoesParaCorrigir.length === 0) { alert('Nenhuma sessão a corrigir.'); return }
+    for (const s of sessoesParaCorrigir) {
+      const mes = s.data_sessao.slice(0, 7)
+      await supabase.from('sessoes').update({ mes_briefing: mes }).eq('id', s.id)
+    }
+    alert(`${sessoesParaCorrigir.length} sessões corrigidas.`)
     load()
   }
 
@@ -489,7 +505,12 @@ export default function FinanceiroPage() {
 
       {/* BRIEFINGS */}
       <section className="space-y-3">
-        <h2 className="font-semibold text-base text-gray-800">Briefings mensais</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-base text-gray-800">Briefings mensais</h2>
+          <button onClick={corrigirMesBriefing} className="text-xs text-gray-400 hover:text-gray-600 underline">
+            Corrigir atribuição de sessões
+          </button>
+        </div>
         {briefings.length === 0
           ? <p className="text-sm text-gray-400 py-2">Nenhum briefing criado ainda.</p>
           : (
