@@ -90,10 +90,10 @@ function sincronizarPeriodo(inicio, fim) {
     const titulo = evento.getTitle().trim();
     if (titulo.toLowerCase().startsWith(PREFIXO_FOLLOWUP)) { ignorados++; return; }
 
-    const eventId    = evento.getId();
     const startTime  = evento.getStartTime();
     const endTime    = evento.getEndTime();
     const dataEvento = Utilities.formatDate(startTime, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    const eventId    = evento.getId() + '::' + dataEvento; // unique per occurrence for recurring events
     const horaInicio = Utilities.formatDate(startTime, Session.getScriptTimeZone(), 'HH:mm');
     const duracaoMin = Math.round((endTime - startTime) / 60000);
 
