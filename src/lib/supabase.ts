@@ -36,6 +36,7 @@ export interface Aluno {
   plano_pt: string | null
   horas_pt_mensais: number | null
   meses_pagos_pt: number | null
+  conta_horas_plano: boolean
   criado_em: string
   atualizado_em: string
 }

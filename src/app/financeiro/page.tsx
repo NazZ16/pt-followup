@@ -325,7 +325,7 @@ export default function FinanceiroPage() {
   const horasPlanoMensal = useMemo(() => {
     return Math.round(
       alunos
-        .filter(a => a.convertido && a.estado === 'ativo')
+        .filter(a => a.convertido && a.estado === 'ativo' && a.conta_horas_plano !== false)
         .reduce((acc, a) => {
           const sv = servicosPT.find(s => s.nome === a.plano_pt)
           if (sv) {

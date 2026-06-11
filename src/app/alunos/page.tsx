@@ -36,10 +36,11 @@ export default function AlunosPage() {
   const [editandoNotas, setEditandoNotas] = useState<string | null>(null)
   const [notas, setNotas] = useState('')
   const [editandoAluno, setEditandoAluno] = useState<string | null>(null)
-  const [formEdit, setFormEdit] = useState({ nome: '', contacto: '', num_socio: '', tipo: 'pt_direto' as TipoAluno, ultima_avaliacao: '' })
+  const [formEdit, setFormEdit] = useState({ nome: '', contacto: '', num_socio: '', tipo: 'pt_direto' as TipoAluno, ultima_avaliacao: '', conta_horas_plano: true })
   const [novoAluno, setNovoAluno] = useState(false)
   const [form, setForm] = useState({ num_socio: '', contacto: '', nome: '', tipo: 'pt_direto' as TipoAluno, ultima_avaliacao: '' })
   const [formJaPT, setFormJaPT] = useState(false)
+  const [formContaHoras, setFormContaHoras] = useState(true)
   const [formPTNovo, setFormPTNovo] = useState({ plano_pt: '', horas_pt_mensais: '', meses_pagos_pt: '1' })
   const [saving, setSaving] = useState(false)
   const [servicosPT, setServicosPT] = useState<ServicoPT[]>([])
@@ -120,7 +121,7 @@ export default function AlunosPage() {
   }
 
   async function guardarEdicaoAluno(aluno: Aluno) {
-    await supabase.from('alunos').update({ nome: formEdit.nome, contacto: formEdit.contacto, num_socio: formEdit.num_socio, tipo: formEdit.tipo, ultima_avaliacao: formEdit.ultima_avaliacao || null })
+    await supabase.from('alunos').update({ nome: formEdit.nome, contacto: formEdit.contacto, num_socio: formEdit.num_socio, tipo: formEdit.tipo, ultima_avaliacao: formEdit.ultima_avaliacao || null, conta_horas_plano: formEdit.conta_horas_plano })
       .eq('num_socio', aluno.num_socio).eq('contacto', aluno.contacto)
     setEditandoAluno(null); load()
   }
@@ -135,9 +136,10 @@ export default function AlunosPage() {
       plano_pt: formJaPT && formPTNovo.plano_pt ? formPTNovo.plano_pt : null,
       horas_pt_mensais: formJaPT && formPTNovo.horas_pt_mensais ? Number(formPTNovo.horas_pt_mensais) : null,
       meses_pagos_pt: formJaPT ? Number(formPTNovo.meses_pagos_pt) || 1 : null,
+      conta_horas_plano: formJaPT ? formContaHoras : true,
     }, { onConflict: 'num_socio,contacto' })
     setForm({ num_socio: '', contacto: '', nome: '', tipo: 'pt_direto', ultima_avaliacao: '' })
-    setFormJaPT(false); setFormPTNovo({ plano_pt: '', horas_pt_mensais: '', meses_pagos_pt: '1' })
+    setFormJaPT(false); setFormContaHoras(true); setFormPTNovo({ plano_pt: '', horas_pt_mensais: '', meses_pagos_pt: '1' })
     setNovoAluno(false); setSaving(false); load()
   }
 
@@ -215,6 +217,11 @@ export default function AlunosPage() {
           </label>
           {formJaPT && (
             <div className="space-y-2 border-t border-gray-100 pt-2">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={formContaHoras} onChange={e => setFormContaHoras(e.target.checked)} className="rounded" />
+                <span className="text-gray-700">Conta horas para o meu nível</span>
+                {!formContaHoras && <span className="text-xs text-amber-600">(aluno de colega — só recebe valor, não horas)</span>}
+              </label>
               <select value={formPTNovo.plano_pt}
                 onChange={e => {
                   const sv = servicosPT.find(s => s.nome === e.target.value)
@@ -309,7 +316,7 @@ export default function AlunosPage() {
                       className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${inativo ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}>
                       {inativo ? 'Reativar' : 'Inativar'}
                     </button>
-                    <button onClick={() => { setEditandoAluno(key); setFormEdit({ nome: aluno.nome, contacto: aluno.contacto, num_socio: aluno.num_socio, tipo: aluno.tipo, ultima_avaliacao: aluno.ultima_avaliacao ?? '' }) }}
+                    <button onClick={() => { setEditandoAluno(key); setFormEdit({ nome: aluno.nome, contacto: aluno.contacto, num_socio: aluno.num_socio, tipo: aluno.tipo, ultima_avaliacao: aluno.ultima_avaliacao ?? '', conta_horas_plano: aluno.conta_horas_plano !== false }) }}
                       className="px-2.5 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-300 transition-colors">✏️ Editar</button>
                   </div>
 
@@ -427,6 +434,13 @@ export default function AlunosPage() {
                         <input type="date" value={formEdit.ultima_avaliacao} onChange={e => setFormEdit({ ...formEdit, ultima_avaliacao: e.target.value })}
                           className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                       </div>
+                      {aluno.convertido && (
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input type="checkbox" checked={formEdit.conta_horas_plano} onChange={e => setFormEdit({ ...formEdit, conta_horas_plano: e.target.checked })} className="rounded" />
+                          <span className="text-gray-700">Conta horas para o meu nível</span>
+                          {!formEdit.conta_horas_plano && <span className="text-xs text-amber-600">(aluno de colega)</span>}
+                        </label>
+                      )}
                       <div className="flex gap-2">
                         <button onClick={() => guardarEdicaoAluno(aluno)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-colors">Guardar</button>
                         <button onClick={() => setEditandoAluno(null)} className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200 transition-colors">Cancelar</button>
