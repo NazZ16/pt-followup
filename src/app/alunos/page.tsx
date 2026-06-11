@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase, Aluno, TarefaFollowup, TipoAluno, TipoFollowup, ServicoPT } from '@/lib/supabase'
-import { gerarMensagem, gerarLinkWhatsApp } from '@/lib/whatsapp'
+import { gerarMensagem, gerarMensagemPlanoPT, gerarLinkWhatsApp } from '@/lib/whatsapp'
 import { confirmarPlanoViaScript, appsScriptConfigurado } from '@/lib/appsscript'
 
 const TIPO_COLOR: Record<TipoAluno, string> = {
@@ -45,6 +45,7 @@ export default function AlunosPage() {
   const [servicosPT, setServicosPT] = useState<ServicoPT[]>([])
   const [marcandoPT, setMarcandoPT] = useState<string | null>(null)
   const [formPT, setFormPT] = useState({ plano_pt: '', horas_pt_mensais: '', meses_pagos_pt: '1' })
+  const [ptConfirmadoAluno, setPtConfirmadoAluno] = useState<Aluno | null>(null)
 
   useEffect(() => { load() }, [])
 
@@ -99,6 +100,7 @@ export default function AlunosPage() {
     }).eq('num_socio', aluno.num_socio).eq('contacto', aluno.contacto)
     setMarcandoPT(null)
     setFormPT({ plano_pt: '', horas_pt_mensais: '', meses_pagos_pt: '1' })
+    setPtConfirmadoAluno(aluno)
     load()
   }
 
@@ -312,6 +314,20 @@ export default function AlunosPage() {
                   </div>
 
                   {/* Marcar PT — form de serviço */}
+                  {ptConfirmadoAluno?.num_socio === aluno.num_socio && ptConfirmadoAluno?.contacto === aluno.contacto && aluno.contacto && (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2.5 flex items-center gap-2">
+                      <span className="text-xs text-emerald-800 flex-1">Plano confirmado! Enviar notificação?</span>
+                      <a href={gerarLinkWhatsApp(aluno.contacto, gerarMensagemPlanoPT(aluno.nome))}
+                        target="_blank" rel="noopener noreferrer"
+                        onClick={() => setPtConfirmadoAluno(null)}
+                        className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition-colors whitespace-nowrap">
+                        WhatsApp
+                      </a>
+                      <button onClick={() => setPtConfirmadoAluno(null)}
+                        className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
+                    </div>
+                  )}
+
                   {marcandoPT === key && (
                     <div className="bg-white rounded-lg border border-emerald-200 p-2.5 space-y-2">
                       <p className="text-xs font-semibold text-gray-700">Serviço fechado</p>
