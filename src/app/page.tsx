@@ -76,7 +76,7 @@ export default function BriefingPage() {
       convertidos: aa.filter(x => x.convertido && x.estado === 'ativo').length,
       semPlanoTotal: aa.filter(x => !x.plano_confirmado_em && x.estado === 'ativo').length,
     })
-    setSemPlanoApp(aa.filter(x => x.convertido && !x.plano_confirmado_em && x.estado === 'ativo'))
+    setSemPlanoApp(aa.filter(x => !x.plano_confirmado_em && x.estado === 'ativo' && (x.convertido || x.tipo === 'rep' || x.tipo === 'oi')))
 
     // Calcular mês em curso
     const aptivos = (alunosPT as Aluno[]) || []
