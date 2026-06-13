@@ -225,6 +225,14 @@ export default function BriefingPage() {
                       WhatsApp
                     </a>
                   )}
+                  <button onClick={async () => {
+                    await supabase.from('alunos').update({ plano_confirmado_em: new Date().toISOString().slice(0, 10) })
+                      .eq('num_socio', a.num_socio).eq('contacto', a.contacto)
+                    loadAll()
+                  }}
+                    className="text-xs px-2.5 py-1.5 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors whitespace-nowrap">
+                    Confirmar ✓
+                  </button>
                 </div>
               )
             })}
