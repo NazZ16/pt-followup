@@ -272,13 +272,17 @@ export default function BriefingPage() {
                             s.data_sessao <= hojeStr ? 'bg-red-50' : 'bg-gray-50'
                           }`}>
                             {s.data_sessao <= hojeStr && s.estado !== 'cancelada' && (
-                              <button onClick={() => toggleSessao(s)}
-                                title={realizada ? 'Marcar como falta' : 'Confirmar presença'}
-                                className={`w-5 h-5 rounded-full shrink-0 flex items-center justify-center text-xs font-bold border-2 transition-colors ${
-                                  realizada ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-red-300 hover:border-emerald-400'
-                                }`}>
-                                {realizada ? '✓' : '✗'}
-                              </button>
+                              realizada ? (
+                                <button onClick={() => toggleSessao(s)} title="Marcar como falta"
+                                  className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center text-xs font-bold border-2 bg-emerald-500 border-emerald-500 text-white transition-colors hover:bg-red-400 hover:border-red-400">
+                                  ✓
+                                </button>
+                              ) : (
+                                <button onClick={() => toggleSessao(s)} title="Confirmar presença"
+                                  className="shrink-0 text-xs px-1.5 py-0.5 rounded-md bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors">
+                                  OK
+                                </button>
+                              )
                             )}
                             <div className="flex-1 min-w-0">
                               <span className="text-sm font-semibold text-gray-900">{label}</span>
