@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase, TarefaHoje, MesCorrente, Aluno, Sessao, TipoSessaoRow, NivelRemuneracao, ConfigFiscal, SsTrimestral, ServicoPT } from '@/lib/supabase'
-import { gerarMensagem, gerarMensagemLembrete, gerarLinkWhatsApp } from '@/lib/whatsapp'
+import { gerarMensagem, gerarMensagemLembrete, gerarMensagemPlanoPT, gerarLinkWhatsApp } from '@/lib/whatsapp'
 import { marcarTarefaViaScript, appsScriptConfigurado } from '@/lib/appsscript'
 
 const URGENCIA_COLOR: Record<string, string> = {
@@ -23,6 +23,7 @@ export default function BriefingPage() {
   const [tarefas, setTarefas] = useState<TarefaHoje[]>([])
   const [mes, setMes] = useState<MesCorrente | null>(null)
   const [semPlano, setSemPlano] = useState<Aluno[]>([])
+  const [semPlanoApp, setSemPlanoApp] = useState<Aluno[]>([])
   const [briefingAberto, setBriefingAberto] = useState(false)
   const [sessoesSemana, setSessoesSemana] = useState<(Sessao & { nome?: string })[]>([])
   const [avaliacoesAmanha, setAvaliacoesAmanha] = useState<(Sessao & { nome?: string })[]>([])
@@ -75,6 +76,7 @@ export default function BriefingPage() {
       convertidos: aa.filter(x => x.convertido && x.estado === 'ativo').length,
       semPlanoTotal: aa.filter(x => !x.plano_confirmado_em && x.estado === 'ativo').length,
     })
+    setSemPlanoApp(aa.filter(x => x.convertido && !x.plano_confirmado_em && x.estado === 'ativo'))
 
     // Calcular mês em curso
     const aptivos = (alunosPT as Aluno[]) || []
@@ -207,6 +209,29 @@ export default function BriefingPage() {
         </section>
       )}
 
+      {/* PLANOS NA APP */}
+      {semPlanoApp.length > 0 && (
+        <section>
+          <p className="text-xs font-semibold text-purple-600 uppercase tracking-wide mb-1.5">📱 Planos por confirmar na app</p>
+          <div className="space-y-1.5">
+            {semPlanoApp.map(a => {
+              const link = a.contacto ? gerarLinkWhatsApp(a.contacto, gerarMensagemPlanoPT(a.nome)) : null
+              return (
+                <div key={`${a.num_socio}-${a.contacto}`} className="bg-white rounded-xl shadow-sm border border-purple-100 p-3 flex items-center gap-3">
+                  <span className="flex-1 text-sm font-semibold text-gray-900">{a.nome}</span>
+                  {link && (
+                    <a href={link} target="_blank" rel="noopener noreferrer"
+                      className="text-xs px-2.5 py-1.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors whitespace-nowrap">
+                      WhatsApp
+                    </a>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
       {/* SESSÕES DA SEMANA (hoje + próximos 7 dias, excl. natação) */}
       {(() => {
         const NATACAO = new Set(['n1','n2','n3','n4','n5','n6','n1f','n2f','n3f','n4f','n5f','n6f'])
@@ -241,13 +266,18 @@ export default function BriefingPage() {
                         const tipoLabel = tipo?.nome ?? s.tipo_sessao_id
                         const isTreino = s.tipo_sessao_id.startsWith('treino') || s.tipo_sessao_id === 'sw'
                         return (
-                          <div key={s.id} className={`flex items-center gap-2 rounded-lg px-2 py-1 ${realizada ? 'bg-emerald-50' : isHoje ? 'bg-amber-50' : 'bg-gray-50'}`}>
-                            {isHoje && (
+                          <div key={s.id} className={`flex items-center gap-2 rounded-lg px-2 py-1 ${
+                            s.estado === 'cancelada' ? 'bg-gray-100 opacity-60' :
+                            realizada ? 'bg-emerald-50' :
+                            s.data_sessao <= hojeStr ? 'bg-red-50' : 'bg-gray-50'
+                          }`}>
+                            {s.data_sessao <= hojeStr && s.estado !== 'cancelada' && (
                               <button onClick={() => toggleSessao(s)}
+                                title={realizada ? 'Marcar como falta' : 'Confirmar presença'}
                                 className={`w-5 h-5 rounded-full shrink-0 flex items-center justify-center text-xs font-bold border-2 transition-colors ${
-                                  realizada ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 hover:border-emerald-400'
+                                  realizada ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-red-300 hover:border-emerald-400'
                                 }`}>
-                                {realizada ? '✓' : ''}
+                                {realizada ? '✓' : '✗'}
                               </button>
                             )}
                             <div className="flex-1 min-w-0">
